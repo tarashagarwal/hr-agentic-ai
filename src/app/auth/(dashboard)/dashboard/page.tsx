@@ -1,115 +1,75 @@
+// A React UI for LangGraph-powered HR Chat Agent
 'use client';
 
-import React, { useEffect, useState, useRef } from "react";
-import NoticeDetailCard from '@/components/ui/noticeDetailCard';
-import { toast, ToastContainer, Slide } from "react-toastify";
+import React, { useState, useRef, useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
 
-export default function NoticeListScreen() {
-  const [notices, setNotices] = useState<any[]>([]);
-  const [page, setPage] = useState(1);
-  const loader = useRef<HTMLDivElement | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+const themes = {
+  primary: '#4b6fff',
+  background: '#f0f4ff',
+  accent: '#263ca6',
+};
+
+export default function HRLangGraphUI() {
+  const [messages, setMessages] = useState([]);
+  const [query, setQuery] = useState('');
+  const chatRef = useRef(null);
+
+  const handleSend = () => {
+    if (!query.trim()) return;
+    const newMessages = [...messages, { role: 'user', text: query }];
+    setMessages([...newMessages, { role: 'assistant', text: `${query}` }]); // Placeholder
+    setQuery('');
+  };
 
   useEffect(() => {
-    fetchNotices(1); // Start at page 1
-  }, []);
-
-  useEffect(() => {
-    if (!hasMore) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !loading && hasMore) {
-          fetchNotices(page);
-        }
-      },
-      { threshold: 1 }
-    );
-
-    if (loader.current) {
-      observer.observe(loader.current);
-    }
-
-    return () => {
-      if (loader.current) {
-        observer.unobserve(loader.current);
-      }
-    };
-  }, [loading, hasMore, page]);
-
-  async function fetchNotices(currentPage: number) {
-    if (!hasMore) return;
-  
-    setLoading(true);
-    try {
-      const response = await fetch(`https://wp9s6wxn0h.execute-api.us-east-1.amazonaws.com/notices?page=${currentPage}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch notices');
-      }
-  
-      const data = await response.json();
-  
-      if (data.length === 0) {
-        setHasMore(false);
-        return;
-      }
-  
-      // 🔥 Filter new data to avoid duplicate IDs
-      setNotices((prev) => {
-        const existingIds = new Set(prev.map((n) => n.id));
-        const uniqueNewNotices = data.filter((n: any) => !existingIds.has(n.id));
-        return [...prev, ...uniqueNewNotices];
-      });
-  
-      setPage(currentPage + 1);
-    } catch (error) {
-      console.error(error);
-      toast.error("Failed to load more notices!");
-    } finally {
-      setLoading(false);
-    }
-  }
-  
-
-  function showToast(title: string, message: string) {
-    const truncatedTitle = title.length > 10 ? `${title.slice(0, 10)}...` : title;
-    toast.success(
-      <div>
-        <strong>{truncatedTitle}</strong>
-        <br />
-        {message}
-      </div>
-    );
-  }
-  
-  function handleDeleteNotice(id: string) {
-    console.log("Delete Triggered")
-    setNotices((prev) => prev.filter((notice) => notice.id !== id));
-  }
+    chatRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto min-h-screen">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
-        {notices.map((notice) => (
-          <NoticeDetailCard 
-            key={notice.id}
-            initialNotice={notice}
-            onToast={showToast}
-            onDelete={handleDeleteNotice}
-          />
-        ))}
-      </div>
+    <main className="min-h-screen w-full p-8" style={{ background: themes.background }}>
+      <motion.h1
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+        className="text-4xl font-bold mb-6 text-center"
+        style={{ color: themes.accent }}
+      >
+        HR Chat Agent - Squyarelft
+      </motion.h1>
 
-      {hasMore && <div ref={loader} className="h-10"></div>}
-      
-      <ToastContainer
-        newestOnTop={true}
-        closeOnClick
-        draggable
-        autoClose={3000}
-        transition={Slide}
-      />
-    </div>
+      <Card className="w-full max-w-4xl mx-auto rounded-2xl shadow-xl">
+        <CardContent className="p-6 space-y-4">
+          <div className="h-[60vh] overflow-y-auto space-y-3">
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`p-3 rounded-lg w-fit max-w-[80%] ${
+                  msg.role === 'user' ? 'bg-blue-200 ml-auto' : 'bg-gray-100 mr-auto'
+                }`}
+              >
+                {msg.text}
+              </div>
+            ))}
+            <div ref={chatRef} />
+          </div>
+
+          <div className="flex gap-2">
+            <textarea
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ask your HR assistant..."
+              className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={2}
+            />
+            <Button style={{ backgroundColor: themes.primary }} onClick={handleSend}>
+              Send
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </main>
   );
 }
