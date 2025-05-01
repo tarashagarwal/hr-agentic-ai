@@ -137,3 +137,5 @@ dist
 
 #agent files
 agent/hr
+agent/function.zip
+agent/python
