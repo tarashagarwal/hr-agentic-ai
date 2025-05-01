@@ -20,7 +20,7 @@ export default function HRLangGraphUI() {
   const handleSend = () => {
     if (!query.trim()) return;
     const newMessages = [...messages, { role: 'user', text: query }];
-    setMessages([...newMessages, { role: 'assistant', text: `${query}` }]); // Placeholder
+    setMessages([...newMessages, { role: 'assistant', text: ` ${query}` }]); // Placeholder
     setQuery('');
   };
 
