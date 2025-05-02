@@ -7,6 +7,7 @@ import random
 import operator
 from typing import Annotated, Union, List, Optional, TypedDict
 from langchain.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from flask import Flask, request, jsonify
 import uuid
 
@@ -57,11 +58,9 @@ tool_executor = ToolExecutor(tools)
 # ─── LLM Agent Setup ───────────────────────────────────────────────────────────
 agent_prompt = ChatPromptTemplate.from_messages([
     ("system", 
-     "You are an HR assistant chatbot. Your job is to assist users with HR-related queries such as hiring, skills assessment, and company policies. "
-     "If the user hasn't mentioned required skills yet, your first response should be:\n"
-     "\"What are the required skills for this position?\"\n"
-     "If the user provides skills or technologies, extract them and update the skills list. Respond professionally and concisely."
-     "Once skill have been recorded generate a job description based on the provided skills."),
+     "You are an HR assistant chatbot. Your job is to assist users with HR-related queries such as hiring, skills assessment, and company policies."
+     "Whenver user ask for Anything. Please provide them with the best possible answer even if general question but in the end remind them that your best"
+     "Primary Task is to help with Hiring Related tasks."),
     ("user", "{input}"),
     ("system", "{agent_scratchpad}")
 ])
@@ -78,7 +77,7 @@ def build_initial_state(user_input: str) -> AgentState:
         "skills": None,
         "agent_outcome": None,
         "agent_scratchpad": "",
-        "intermediate_steps": []  # <-- this line is crucial
+        "intermediate_steps": []
     }
 
 
@@ -97,7 +96,7 @@ def run_agent(state: AgentState):
         state["intermediate_steps"].append((agent_outcome, str(result)))
         return {"agent_outcome": agent_outcome}
 
-    state["messages"].append(agent_outcome.return_values["output"])
+    state["messages"].append(AIMessage(content=agent_outcome.return_values["output"]))
     # If the outcome is a finish, return it directly
     return {"agent_outcome": agent_outcome}
 
@@ -110,7 +109,7 @@ def generate_job_description(state: AgentState) -> AgentState:
     # Ensure skills are provided
     skills = state.get("skills")
     if not skills:
-        state["messages"].append("No skills provided. Cannot prepare a job description.")
+        state["messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
         return state
 
     # Query the LLM to generate a job description
@@ -119,7 +118,7 @@ def generate_job_description(state: AgentState) -> AgentState:
 
     # Update the state with the generated job description
     state["job_description"] = response
-    state["messages"].append(f"Generated Job Description: {response}")
+    state["messages"].append(AIMessage(content=f"Generated Job Description: {response}"))
     print("Generated Job Description:", response)
     return state
 
@@ -135,7 +134,7 @@ def update_skills(state: AgentState) -> AgentState:
         state["skills"] += f", {user_input}"
 
     # Add a message to indicate the update
-    state["messages"].append(f"Updated skills: {state['skills']}")
+    state["messages"].append(SystemMessage(content=f"Updated skills: {state['skills']}"))
     print("Updated skills:", state["skills"])
     return state
 
@@ -208,9 +207,10 @@ def chat():
         state = build_initial_state(user_input)
     else:
         state = SESSION_STORE[session_id]
-        state["input"] = user_input
-        state["user_inputs"].append(user_input)
-    
+      
+    state["input"] = user_input
+    state["user_inputs"].append(user_input)
+    state["messages"].append(HumanMessage(content=user_input))
 
     # Run the LangGraph logic
     result = graph.invoke(state)
@@ -230,8 +230,12 @@ def chat():
     # Save updated state in memory
     SESSION_STORE[session_id] = result
 
+    messages = [message.content for message in state["messages"]]
+
     return jsonify({
-        "reply": reply,
+        "user_input": user_input if user_input else "",
+        "reply": messages[-1] if messages else "",
+        "messages": messages,
         "session_id": session_id
     })
 
