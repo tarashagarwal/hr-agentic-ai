@@ -15,7 +15,7 @@ from flask import Flask, request, jsonify
 
 # ─── Load environment from parent dir ─────────────────────────────────────────
 load_dotenv("../.env.local")
-os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+os.environ["OPENAI_API_KEY"]    = os.getenv("OPENAI_API_KEY")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
 os.environ["LANGCHAIN_PROJECT"] = "LangGraph_HRAgent"
 
@@ -60,12 +60,13 @@ agent_prompt = ChatPromptTemplate.from_messages([
      "You are an HR assistant chatbot. Your job is to assist users with HR-related queries such as hiring, skills assessment, and company policies. "
      "If the user hasn't mentioned required skills yet, your first response should be:\n"
      "\"What are the required skills for this position?\"\n"
-     "Once skills are provided, proceed with hiring assistance. Respond professionally and concisely."),
+     "If the user provides skills or technologies, extract them and update the skills list. Respond professionally and concisely."
+     "Once skill have been recorded generate a job description based on the provided skills."),
     ("user", "{input}"),
     ("system", "{agent_scratchpad}")
 ])
 
-llm = ChatOpenAI(model="gpt-4")
+llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 agent_runnable = create_openai_functions_agent(llm, tools, agent_prompt)
 
 # ─── Helper Functions ─────────────────────────────────────────────────────────
@@ -86,53 +87,104 @@ def should_continue(state: AgentState) -> str:
 
 # ─── State Functions ───────────────────────────────────────────────────────────
 def run_agent(state: AgentState):
-    print("Reached Here 3")
-    return {"agent_outcome": agent_runnable.invoke(state)}
+    agent_outcome = agent_runnable.invoke(state)
+    print("Reached Here 3 ************", agent_outcome)
+
+    # Check if the outcome is an action
+    if isinstance(agent_outcome, AgentAction):
+        # Execute the tool and update the state
+        result = tool_executor.invoke(agent_outcome)
+        state["intermediate_steps"].append((agent_outcome, str(result)))
+        return {"agent_outcome": agent_outcome}
+
+    state["messages"].append(agent_outcome.return_values["output"])
+    # If the outcome is a finish, return it directly
+    return {"agent_outcome": agent_outcome}
 
 def execute_tools(state: AgentState):
     action = state["agent_outcome"]
     result = tool_executor.invoke(action)
     return {"intermediate_steps": [(action, str(result))]}
 
-def prompt_skills(state: AgentState) -> AgentState:
-    state = increment_field_counter(state, "skills")
-
+def generate_job_description(state: AgentState) -> AgentState:
+    # Ensure skills are provided
     skills = state.get("skills")
-    if not skills or len(skills) == 0:
-        state["messages"].append("Please enter at least one skill.")
+    if not skills:
+        state["messages"].append("No skills provided. Cannot prepare a job description.")
         return state
+
+    # Query the LLM to generate a job description
+    prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role."
+    response = llm.predict(prompt)
+
+    # Update the state with the generated job description
+    state["job_description"] = response
+    state["messages"].append(f"Generated Job Description: {response}")
+    print("Generated Job Description:", response)
+    return state
+
+def update_skills(state: AgentState) -> AgentState:
+    # Extract the user's input
+    user_input = state["input"]
+
+    # Update the skills field based on the user's input
+    if "skills" not in state or not state["skills"]:
+        state["skills"] = user_input
     else:
-        state["messages"].append(f"Thanks! You entered: {', '.join(skills)}")
-        return state
+        # Append new skills to the existing list
+        state["skills"] += f", {user_input}"
 
-def get_skills_needed(state: AgentState) -> AgentState:
-    txt = input("Can you please enter the skills needed?").strip()
-    state["skills"] = txt
-    state["last_input"] = txt
-    state["intermediate_steps"].append(f"Collected Skills: {txt}")
+    # Add a message to indicate the update
+    state["messages"].append(f"Updated skills: {state['skills']}")
+    print("Updated skills:", state["skills"])
     return state
 
-def increment_field_counter(state: AgentState, field_name: str) -> AgentState:
-    if "field_counters" not in state:
-        state["field_counters"] = {}
-    state["field_counters"][field_name] = state["field_counters"].get(field_name, 0) + 1
+
+def generate_job_description(state: AgentState) -> AgentState:
+    # Extract the user's input
+    user_input = state["input"]
+
+    # Update the skills field based on the user's input
+    if "skills" not in state or not state["skills"]:
+        state["skills"] = user_input
+    else:
+        # Append new skills to the existing list
+        state["skills"] += f", {user_input}"
+
+    # Add a message to indicate the update
+    state["messages"].append(f"Updated skills: {state['skills']}")
+    print("Updated skills:", state["skills"])
     return state
+
+# def increment_field_counter(state: AgentState, field_name: str) -> AgentState:
+#     if "field_counters" not in state:
+#         state["field_counters"] = {}
+#     state["field_counters"][field_name] = state["field_counters"].get(field_name, 0) + 1
+#     return state
 
 # ─── LangGraph Workflow ────────────────────────────────────────────────────────
 workflow = StateGraph(AgentState)
 
 workflow.add_node("initialize_agent", run_agent)
-workflow.add_node("get_skills", prompt_skills)
-workflow.add_edge("get_skills", "initialize_agent")
-
-
-workflow.set_entry_point("initialize_agent")
+workflow.add_node("update_skills", update_skills)
+workflow.add_node("generate_job_description", generate_job_description)
 
 workflow.add_conditional_edges(
     "initialize_agent",
     should_continue,
-    {"continue": "get_skills", "end": END}
+    {"continue": "update_skills", "end": END}
 )
+
+workflow.add_edge("update_skills", "generate_job_description")
+
+
+workflow.add_conditional_edges(
+    "generate_job_description",
+    lambda state: "end",  # End the workflow after generating the job description
+    {"end": END}
+)
+
+workflow.set_entry_point("initialize_agent")
 
 graph = workflow.compile()
 
@@ -158,10 +210,22 @@ def chat():
         state = SESSION_STORE[session_id]
         state["input"] = user_input
         state["user_inputs"].append(user_input)
+    
 
     # Run the LangGraph logic
     result = graph.invoke(state)
-    reply = result["agent_outcome"].return_values["output"]
+    agent_outcome = result["agent_outcome"]
+
+    print("State:")
+    print(state)
+
+    # Handle AgentFinish or AgentAction
+    if isinstance(agent_outcome, AgentFinish):
+        reply = state["messages"][-1] if state["messages"] else ""
+    elif isinstance(agent_outcome, AgentAction):
+        reply = f"Action required: {agent_outcome.tool} with input {agent_outcome.tool_input}"
+    else:
+        reply = "Unexpected outcome from the agent."
 
     # Save updated state in memory
     SESSION_STORE[session_id] = result
