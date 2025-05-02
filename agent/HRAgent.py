@@ -1,8 +1,14 @@
+# Global in-memory session store
+SESSION_STORE = {}
+
+# ─── Imports ──────────────────────────────────────────────────────────────────
 import os
 import random
 import operator
 from typing import Annotated, Union, List, Optional, TypedDict
 from langchain.prompts import ChatPromptTemplate
+from flask import Flask, request, jsonify
+import uuid
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
@@ -132,21 +138,38 @@ graph = workflow.compile()
 
 # ─── Flask App ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+SESSION_STORE = {}  # Global dictionary for session persistence
 
 @app.route("/chat", methods=["GET", "POST"])
 def chat():
     if request.method == "POST":
-        user_input = request.get_json(force=True).get("input", "")
-    else:  # GET request
+        data = request.get_json(force=True)
+        user_input = data.get("input", "")
+        session_id = data.get("session_id")
+    else:
         user_input = request.args.get("chat", "")
+        session_id = request.args.get("session_id")
 
-    state = build_initial_state(user_input)
-    print("Reached here 1")
+    # Start a new session if not provided or not found
+    if not session_id or session_id not in SESSION_STORE:
+        session_id = session_id or str(uuid.uuid4())
+        state = build_initial_state(user_input)
+    else:
+        state = SESSION_STORE[session_id]
+        state["input"] = user_input
+        state["user_inputs"].append(user_input)
+
+    # Run the LangGraph logic
     result = graph.invoke(state)
-    print("Reached here 2")
     reply = result["agent_outcome"].return_values["output"]
-    return jsonify({"reply": reply})
 
+    # Save updated state in memory
+    SESSION_STORE[session_id] = result
+
+    return jsonify({
+        "reply": reply,
+        "session_id": session_id
+    })
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
