@@ -53,14 +53,14 @@ def classify_intent(input_text: str) -> str:
     """Classify the user's intent into one of: hiring, general_query, greeting, feedback, unknown."""
     prompt = f"""
 You are an intent classifier. Read the following user input and classify the intent into one of these categories:
-"hiring", "general_query", "greeting", "feedback", "unknown". Anything that is related to job, finding employes etc should be classified as hiring
+"hiring", "general_query". Anything that is related to job, finding employes etc should be classified as hiring
 
 User input: "{input_text}"
 
 Just return one of the five categories, nothing else.
 """
     result = llm.invoke(prompt)
-    pdb.set_trace()
+    #pdb.set_trace()
     return result.content.strip().lower()
 
 
@@ -226,7 +226,7 @@ app = Flask(__name__)
 def chat():
     if request.method == "POST":
         data = request.get_json(force=True)
-        user_input = data.get("input", "")
+        user_input = data.get("chat", "")
         session_id = data.get("session_id")
     else:
         user_input = request.args.get("chat", "")
@@ -241,9 +241,10 @@ def chat():
     else:
         state = SESSION_STORE[session_id]
         # Resume interrupted flow with user's response
-        state["input"] = user_input
-        state["user_inputs"].append(user_input)
-        state["messages"].append(HumanMessage(content=user_input))
+    state["input"] = user_input
+    state["user_inputs"].append(user_input)
+    state["messages"].append(HumanMessage(content=user_input))
+
     # Run or resume graph
     interrupt_info = state.get("__interrupt__")
     thread_config = {"configurable": {"thread_id": session_id}}
@@ -254,7 +255,10 @@ def chat():
         result = graph.invoke(command, config=thread_config)
     else:
         result = graph.invoke(state, config=thread_config)
+        
     print(state)
+    #pdb.set_trace()
+    
     # Handle interrupt
     if "__interrupt__" in result:
         SESSION_STORE[session_id] = result
@@ -263,7 +267,7 @@ def chat():
             "question": result["__interrupt__"],
             "session_id": session_id,
             "messages": [
-                f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"user: {m.content}"
+                f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"human: {m.content}"
                 for m in result["messages"]
             ]
         })
@@ -272,17 +276,20 @@ def chat():
     SESSION_STORE[session_id] = result
     reply = result["messages"][-1].content if result["messages"] else ""
 
-    return jsonify({
+    response = jsonify({
         "interrupted": False,
         "reply": reply,
         "session_id": session_id,
         "messages": [
-            f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"user: {m.content}"
+            f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"human: {m.content}"
             for m in result["messages"]
         ]
     })
 
-
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
