@@ -1,177 +1,46 @@
 # Global in-memory session store
 import pdb
 SESSION_STORE = {}
-COMPANY_NAME= "Square Lift"
-LOCATION = "California, USA"
+
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
 import os
 import random
-import operator
-from typing import Annotated, Union, List, Optional
-from typing_extensions import TypedDict, Literal
-
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
 import uuid
 
-from langchain.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
-from langchain_core.agents import AgentAction, AgentFinish
-
 from langchain.agents.openai_functions_agent.base import create_openai_functions_agent
-from langchain.tools import tool
-from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import MemorySaver
 
+from agent.agentic_logic import (
+    llm,
+    agent_prompt,
+    agent_runnable,
+    build_initial_state,
+    run_agent,
+    handle_general_query,
+    get_skills,
+    update_skills,
+    generate_job_description,
+    AgentState
+)
 
 
 # ─── Load environment ──────────────────────────────────────────────────────────
-load_dotenv("../.env.local")
+from dotenv import load_dotenv, find_dotenv
+
+# look specifically for “.env.local” up the directory tree
+dotenv_path = find_dotenv(".env.local")
+if not dotenv_path:
+    raise FileNotFoundError("Could not find .env.local in any parent folder")
+load_dotenv(dotenv_path)
+
 os.environ["OPENAI_API_KEY"]    = os.getenv("OPENAI_API_KEY")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
 os.environ["LANGCHAIN_PROJECT"] = "LangGraph_HRAgent"
-
-# ─── Agent State Schema ───────────────────────────────────────────────────────
-class AgentState(TypedDict):
-    input: str
-    next_expected_node: str
-    user_inputs: List[str]
-    messages: List[BaseMessage]
-    skills: Optional[str]
-    intent: str
-    agent_outcome: Union[AgentAction, AgentFinish, None]
-    agent_scratchpad: str
-    intermediate_steps: Annotated[List[tuple[AgentAction, str]], operator.add]
-    job_description: Optional[str]
-
-# ─── Tools ────────────────────────────────────────────────────────────────────
-@tool("classify_intent", return_direct=True)
-def classify_intent(input_text: str) -> str:
-    """Classify the user's intent into one of: hiring, general_query, greeting, feedback, unknown."""
-    prompt = f"""
-You are an intent classifier. Read the following user input and classify the intent into one of these categories:
-"hiring", "general_query". Anything that is related to job, finding employes etc should be classified as hiring
-
-User input: "{input_text}"
-
-Just return one of the five categories, nothing else.
-"""
-    result = llm.invoke(prompt)
-    #pdb.set_trace()
-    return result.content.strip().lower()
-
-
-
-# @tool("lower_case", return_direct=True)
-# def to_lower_case(input_text: str) -> str:
-#     """Convert the given text to all lowercase letters."""
-#     return input_text.lower()
-
-@tool("random_number", return_direct=True)
-def random_number_maker(input_text: str) -> str:
-    """Return a random integer between 0 and 100 as a string."""
-    return "Generated Random Number = " + str(random.randint(0, 100))
-
-tools = [random_number_maker, classify_intent]
-tools_map = { f.name: f for f in tools } 
-
-# ─── LLM and Agent Setup ───────────────────────────────────────────────────────
-llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
-agent_prompt = ChatPromptTemplate.from_messages([
-    ("system", 
-     "If the use ask to perform a general task do it first, but mention that your skills are best used for hiring related purposes"),
-    ("user", "{input}"),
-    ("system", "{agent_scratchpad}")
-])
-
-agent_runnable = create_openai_functions_agent(llm, tools, agent_prompt)
-
-# ─── Helper Functions ─────────────────────────────────────────────────────────
-def build_initial_state(user_input: str) -> AgentState:
-    return {
-        "input": user_input,
-        "user_inputs": [],
-        "messages": [],
-        "skills": None,
-        "intent": "",
-        "agent_outcome": None,
-        "agent_scratchpad": "",
-        "intermediate_steps": [],
-        "job_description": None,
-    }
-
-# ─── State Functions ───────────────────────────────────────────────────────────
-def run_agent(state: AgentState) -> AgentState:
-    agent_outcome = agent_runnable.invoke(state)
-    state["agent_outcome"] = agent_outcome
-
-    if isinstance(agent_outcome, AgentAction):
-
-        tool_name = agent_outcome.tool
-        result = tools_map[tool_name].invoke(agent_outcome.tool_input)
-        state["intermediate_steps"].append((agent_outcome, str(result)))
-
-        if agent_outcome.tool == "classify_intent":
-            state["intent"] = str(result).strip().lower()
-        else: 
-            state["messages"].append(AIMessage(content=f"{result}"))
-
-        state["agent_scratchpad"] += f"Executed tool: {agent_outcome.tool}, Result: {result}\n"
-        return state
-
-    if isinstance(agent_outcome, AgentFinish):
-        state["messages"].append(AIMessage(content=agent_outcome.return_values["output"]))
-        return state
-
-    return state
-
-def handle_general_query(state: AgentState) -> AgentState:
-    """Handle general queries by passing the input back to the LLM using the agent prompt."""
-    user_input = state["input"]
-    # Ensure agent_scratchpad is initialized
-    if "agent_scratchpad" not in state:
-        state["agent_scratchpad"] = ""  # Initialize if missing
-
-    # Use the agent prompt to guide the LLM's response
-    prompt = agent_prompt.format(input=user_input, agent_scratchpad=state["agent_scratchpad"])
-    response = llm.predict(prompt)
-
-    # Add the response to the state messages
-    state["messages"].append(AIMessage(content=response))
-    print(f"General query response: {response}")  # Debugging
-    return state
-
-def get_skills(state: AgentState) -> AgentState:
-    if not state.get("skills"):
-        #prompt = "Generate a polite system message asking the user to provide the set of skills required for the job."
-        response = "Please provide the set of skills required for the job."
-        state["messages"].append(SystemMessage(content=response))
-        state[ "skills"] = interrupt(response) # Initialize skills if not present
-    return state
-
-def update_skills(state: AgentState) -> AgentState:
-
-    user_input = state["input"]
-    if not state.get("skills"):
-        state["skills"] = user_input
-    else:
-        state["skills"] += f", {user_input}"
-    state["next_expected_node"] = "generate_job_description"
-    return state
-
-def generate_job_description(state: AgentState) -> AgentState:
-    skills = state.get("skills")
-    if not skills:
-        state["messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
-        return state
-    prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role. for {COMPANY_NAME} located at {LOCATION}"
-    response = llm.predict(prompt)
-    state["job_description"] = response
-    state["messages"].append(AIMessage(content=f"Generated Job Description: {response}"))
-    return state
 
 
 # ─── LangGraph Workflow ────────────────────────────────────────────────────────

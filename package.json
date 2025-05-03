@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "agent": "gnome-terminal --tab --title='HR Agent' -- bash -ic \"cd \\\"$PWD\\\" && python -m agent.HRAgent; exec bash\"",
+    "dev":   "yarn agent & yarn web",
+    "web": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
