@@ -1,6 +1,8 @@
 # Global in-memory session store
 import pdb
 SESSION_STORE = {}
+COMPANY_NAME= "Square Lift"
+LOCATION = "California, USA"
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
 import os
@@ -51,13 +53,14 @@ def classify_intent(input_text: str) -> str:
     """Classify the user's intent into one of: hiring, general_query, greeting, feedback, unknown."""
     prompt = f"""
 You are an intent classifier. Read the following user input and classify the intent into one of these categories:
-"hiring", "general_query", "greeting", "feedback", "unknown".
+"hiring", "general_query", "greeting", "feedback", "unknown". Anything that is related to job, finding employes etc should be classified as hiring
 
 User input: "{input_text}"
 
 Just return one of the five categories, nothing else.
 """
     result = llm.invoke(prompt)
+    pdb.set_trace()
     return result.content.strip().lower()
 
 
@@ -99,8 +102,6 @@ def build_initial_state(user_input: str) -> AgentState:
         "intermediate_steps": [],
         "job_description": None,
     }
-
-
 
 # ─── State Functions ───────────────────────────────────────────────────────────
 def run_agent(state: AgentState) -> AgentState:
@@ -144,7 +145,6 @@ def handle_general_query(state: AgentState) -> AgentState:
     return state
 
 def get_skills(state: AgentState) -> AgentState:
-    #pdb.set_trace()  # For debugging purposes
     if not state.get("skills"):
         #prompt = "Generate a polite system message asking the user to provide the set of skills required for the job."
         response = "Please provide the set of skills required for the job."
@@ -153,7 +153,7 @@ def get_skills(state: AgentState) -> AgentState:
     return state
 
 def update_skills(state: AgentState) -> AgentState:
-    pdb.set_trace()
+
     user_input = state["input"]
     if not state.get("skills"):
         state["skills"] = user_input
@@ -167,7 +167,7 @@ def generate_job_description(state: AgentState) -> AgentState:
     if not skills:
         state["messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
         return state
-    prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role."
+    prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role. for {COMPAN_NAME} located at {LOCATION}"
     response = llm.predict(prompt)
     state["job_description"] = response
     state["messages"].append(AIMessage(content=f"Generated Job Description: {response}"))
@@ -244,7 +244,6 @@ def chat():
         state["input"] = user_input
         state["user_inputs"].append(user_input)
         state["messages"].append(HumanMessage(content=user_input))
-    pdb.set_trace()  # For debugging purposes
     # Run or resume graph
     interrupt_info = state.get("__interrupt__")
     thread_config = {"configurable": {"thread_id": session_id}}
@@ -254,8 +253,8 @@ def chat():
         command = Command(resume=resume_value)
         result = graph.invoke(command, config=thread_config)
     else:
-        result = graph.invoke(state,config=thread_config)
-
+        result = graph.invoke(state, config=thread_config)
+    print(state)
     # Handle interrupt
     if "__interrupt__" in result:
         SESSION_STORE[session_id] = result
