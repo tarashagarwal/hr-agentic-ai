@@ -14,7 +14,7 @@ const themes = {
 };
 
 export default function HRLangGraphUI() {
-  const [messages, setMessages] = useState([]);
+  const [user_messages, setMessages] = useState([]);
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => uuidv4());
   const [isLoading, setIsLoading] = useState(false);
@@ -34,8 +34,8 @@ export default function HRLangGraphUI() {
       );
       const data = await response.json();
 
-      if (data?.messages) {
-        const systemMessages = [{ role: 'system', text: data.messages[data.messages.length - 1].replace(/^system:\s*/, '') }];
+      if (data?.user_messages) {
+        const systemMessages = [{ role: 'system', text: data.user_messages[data.user_messages.length - 1].replace(/^system:\s*/, '') }];
         setMessages((prev) => [...prev, ...systemMessages]);
       }
     } catch (error) {
@@ -48,7 +48,7 @@ export default function HRLangGraphUI() {
 
   useEffect(() => {
     chatRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [user_messages]);
 
   const handleNewSession = () => {
     const newId = uuidv4();
@@ -81,7 +81,7 @@ export default function HRLangGraphUI() {
       <Card className="w-full max-w-4xl mx-auto rounded-2xl shadow-xl">
         <CardContent className="p-6 space-y-4">
           <div className="h-[60vh] overflow-y-auto space-y-3">
-            {messages.map((msg, index) => (
+            {user_messages.map((msg, index) => (
               <div
                 key={index}
                 className={`p-3 rounded-lg w-fit max-w-[80%] text-lg whitespace-pre-wrap ${

@@ -139,3 +139,4 @@ dist
 agent/hr
 agent/function.zip
 agent/python
+agent/__pycache__

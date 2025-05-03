@@ -26,6 +26,7 @@ User input: "{input_text}"
 
 Just return one of the two categories, nothing else.
 """
+
     result = llm.invoke(prompt)
     return result.content.strip().lower()
 

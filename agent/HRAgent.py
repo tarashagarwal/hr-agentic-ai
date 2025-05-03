@@ -28,7 +28,6 @@ from agent.agentic_logic import (
     AgentState
 )
 
-
 # ─── Load environment ──────────────────────────────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
 
@@ -68,7 +67,14 @@ workflow.add_conditional_edges(
     }
 )
 
-workflow.add_edge("get_skills", "update_skills")
+workflow.add_conditional_edges(
+    "get_skills",
+    lambda s: "update_skills" if not s.get("terminate", False) else "end",
+    {
+        "update_skills": "update_skills",
+        "end": END
+    }
+)
 # Normal internal flow after resume
 workflow.add_edge("update_skills", "generate_job_description")
 
@@ -112,7 +118,10 @@ def chat():
         # Resume interrupted flow with user's response
     state["input"] = user_input
     state["user_inputs"].append(user_input)
-    state["messages"].append(HumanMessage(content=user_input))
+    state["user_messages"].append(HumanMessage(content=user_input))
+    state["agent_scratchpad"] = "" #Dont want llm to misclassify the intent based on previous activity
+    state["intermediate_steps"] = []
+    state["intent"] = ""            #same as above
 
     # Run or resume graph
     interrupt_info = state.get("__interrupt__")
@@ -135,24 +144,24 @@ def chat():
             "interrupted": True,
             "question": result["__interrupt__"],
             "session_id": session_id,
-            "messages": [
+            "user_messages": [
                 f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"human: {m.content}"
-                for m in result["messages"]
+                for m in result["user_messages"]
             ]
         })
     else:
 
         # Normal response
         SESSION_STORE[session_id] = result
-        reply = result["messages"][-1].content if result["messages"] else ""
+        reply = result["user_messages"][-1].content if result["user_messages"] else ""
 
         response = jsonify({
             "interrupted": False,
             "reply": reply,
             "session_id": session_id,
-            "messages": [
+            "user_messages": [
                 f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"human: {m.content}"
-                for m in result["messages"]
+                for m in result["user_messages"]
             ]
         })
 
