@@ -1,9 +1,7 @@
-flask==2.3.2
-langgraph==0.0.40
-langchain==0.1.14
-langchain-core==0.1.53
-langchain-openai==0.0.7
-langchain-community==0.0.30
-langchainhub==0.1.14
-openai==1.17.0
-python-dotenv==1.0.1
+langgraph>=0.0.40
+langchain>=0.1.14
+langchain-openai>=0.0.6
+openai>=1.10.0
+pydantic>=2.5.0
+flask
+python-dotenv
