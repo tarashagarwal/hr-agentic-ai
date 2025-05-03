@@ -35,6 +35,7 @@ os.environ["LANGCHAIN_PROJECT"] = "LangGraph_HRAgent"
 # ─── Agent State Schema ───────────────────────────────────────────────────────
 class AgentState(TypedDict):
     input: str
+    next_expected_node: str
     user_inputs: List[str]
     messages: List[BaseMessage]
     skills: Optional[str]
