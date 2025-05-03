@@ -1,195 +1,225 @@
 # Global in-memory session store
+import pdb
 SESSION_STORE = {}
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
 import os
 import random
 import operator
-from typing import Annotated, Union, List, Optional, TypedDict
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from typing import Annotated, Union, List, Optional
+from typing_extensions import TypedDict, Literal
+
 from flask import Flask, request, jsonify
+from dotenv import load_dotenv
 import uuid
 
-from dotenv import load_dotenv
-from flask import Flask, request, jsonify
+from langchain.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
+from langchain_core.agents import AgentAction, AgentFinish
 
-# ─── Load environment from parent dir ─────────────────────────────────────────
+from langchain.agents.openai_functions_agent.base import create_openai_functions_agent
+from langchain.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, END
+from langgraph.types import interrupt, Command
+from langgraph.checkpoint.memory import MemorySaver
+
+
+
+# ─── Load environment ──────────────────────────────────────────────────────────
 load_dotenv("../.env.local")
 os.environ["OPENAI_API_KEY"]    = os.getenv("OPENAI_API_KEY")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
 os.environ["LANGCHAIN_PROJECT"] = "LangGraph_HRAgent"
 
-# ─── LangGraph & LangChain Core ───────────────────────────────────────────────
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
-from langchain_core.agents import AgentAction, AgentFinish
-from langchain_core.messages import BaseMessage
-
-# ─── LangChain Agent + Tools ─────────────────────────────────────────────────
-from langchain.agents.openai_functions_agent.base import create_openai_functions_agent
-from langchain.tools import tool
-from langchain_openai import ChatOpenAI
-from langchain import hub
-
 # ─── Agent State Schema ───────────────────────────────────────────────────────
 class AgentState(TypedDict):
-    skills: Optional[str]
     input: str
     user_inputs: List[str]
     messages: List[BaseMessage]
+    skills: Optional[str]
+    intent: str
     agent_outcome: Union[AgentAction, AgentFinish, None]
+    agent_scratchpad: str
     intermediate_steps: Annotated[List[tuple[AgentAction, str]], operator.add]
+    job_description: Optional[str]
 
 # ─── Tools ────────────────────────────────────────────────────────────────────
-@tool("lower_case", return_direct=True)
-def to_lower_case(input_text: str) -> str:
-    """Convert the given text to all lowercase letters."""
-    return input_text.lower()
+@tool("classify_intent", return_direct=True)
+def classify_intent(input_text: str) -> str:
+    """Classify the user's intent into one of: hiring, general_query, greeting, feedback, unknown."""
+    prompt = f"""
+You are an intent classifier. Read the following user input and classify the intent into one of these categories:
+"hiring", "general_query", "greeting", "feedback", "unknown".
+
+User input: "{input_text}"
+
+Just return one of the five categories, nothing else.
+"""
+    result = llm.invoke(prompt)
+    return result.content.strip().lower()
+
+
+
+# @tool("lower_case", return_direct=True)
+# def to_lower_case(input_text: str) -> str:
+#     """Convert the given text to all lowercase letters."""
+#     return input_text.lower()
 
 @tool("random_number", return_direct=True)
 def random_number_maker(input_text: str) -> str:
     """Return a random integer between 0 and 100 as a string."""
-    return str(random.randint(0, 100))
+    return "Generated Random Number = " + str(random.randint(0, 100))
 
-tools = [to_lower_case, random_number_maker]
-tool_executor = ToolExecutor(tools)
+tools = [random_number_maker, classify_intent]
+tools_map = { f.name: f for f in tools } 
 
-# ─── LLM Agent Setup ───────────────────────────────────────────────────────────
+# ─── LLM and Agent Setup ───────────────────────────────────────────────────────
+llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 agent_prompt = ChatPromptTemplate.from_messages([
     ("system", 
-     "You are an HR assistant chatbot. Your job is to assist users with HR-related queries such as hiring, skills assessment, and company policies."
-     "Whenver user ask for Anything. Please provide them with the best possible answer even if general question but in the end remind them that your best"
-     "Primary Task is to help with Hiring Related tasks."),
+     "If the use ask to perform a general task do it first, but mention that your skills are best used for hiring related purposes"),
     ("user", "{input}"),
     ("system", "{agent_scratchpad}")
 ])
 
-llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 agent_runnable = create_openai_functions_agent(llm, tools, agent_prompt)
 
 # ─── Helper Functions ─────────────────────────────────────────────────────────
 def build_initial_state(user_input: str) -> AgentState:
     return {
         "input": user_input,
-        "user_inputs": [user_input],
+        "user_inputs": [],
         "messages": [],
         "skills": None,
+        "intent": "",
         "agent_outcome": None,
         "agent_scratchpad": "",
-        "intermediate_steps": []
+        "intermediate_steps": [],
+        "job_description": None,
     }
 
 
-def should_continue(state: AgentState) -> str:
-    return "end" if isinstance(state["agent_outcome"], AgentFinish) else "continue"
 
 # ─── State Functions ───────────────────────────────────────────────────────────
-def run_agent(state: AgentState):
+def run_agent(state: AgentState) -> AgentState:
     agent_outcome = agent_runnable.invoke(state)
-    print("Reached Here 3 ************", agent_outcome)
+    state["agent_outcome"] = agent_outcome
 
-    # Check if the outcome is an action
     if isinstance(agent_outcome, AgentAction):
-        # Execute the tool and update the state
-        result = tool_executor.invoke(agent_outcome)
+
+        tool_name = agent_outcome.tool
+        result = tools_map[tool_name].invoke(agent_outcome.tool_input)
         state["intermediate_steps"].append((agent_outcome, str(result)))
-        return {"agent_outcome": agent_outcome}
 
-    state["messages"].append(AIMessage(content=agent_outcome.return_values["output"]))
-    # If the outcome is a finish, return it directly
-    return {"agent_outcome": agent_outcome}
+        if agent_outcome.tool == "classify_intent":
+            state["intent"] = str(result).strip().lower()
+        else: 
+            state["messages"].append(AIMessage(content=f"{result}"))
 
-def execute_tools(state: AgentState):
-    action = state["agent_outcome"]
-    result = tool_executor.invoke(action)
-    return {"intermediate_steps": [(action, str(result))]}
+        state["agent_scratchpad"] += f"Executed tool: {agent_outcome.tool}, Result: {result}\n"
+        return state
+
+    if isinstance(agent_outcome, AgentFinish):
+        state["messages"].append(AIMessage(content=agent_outcome.return_values["output"]))
+        return state
+
+    return state
+
+def handle_general_query(state: AgentState) -> AgentState:
+    """Handle general queries by passing the input back to the LLM using the agent prompt."""
+    user_input = state["input"]
+    # Ensure agent_scratchpad is initialized
+    if "agent_scratchpad" not in state:
+        state["agent_scratchpad"] = ""  # Initialize if missing
+
+    # Use the agent prompt to guide the LLM's response
+    prompt = agent_prompt.format(input=user_input, agent_scratchpad=state["agent_scratchpad"])
+    response = llm.predict(prompt)
+
+    # Add the response to the state messages
+    state["messages"].append(AIMessage(content=response))
+    print(f"General query response: {response}")  # Debugging
+    return state
+
+def get_skills(state: AgentState) -> AgentState:
+    #pdb.set_trace()  # For debugging purposes
+    if not state.get("skills"):
+        #prompt = "Generate a polite system message asking the user to provide the set of skills required for the job."
+        response = "Please provide the set of skills required for the job."
+        state["messages"].append(SystemMessage(content=response))
+        state[ "skills"] = interrupt(response) # Initialize skills if not present
+    return state
+
+def update_skills(state: AgentState) -> AgentState:
+    pdb.set_trace()
+    user_input = state["input"]
+    if not state.get("skills"):
+        state["skills"] = user_input
+    else:
+        state["skills"] += f", {user_input}"
+    state["next_expected_node"] = "generate_job_description"
+    return state
 
 def generate_job_description(state: AgentState) -> AgentState:
-    # Ensure skills are provided
     skills = state.get("skills")
     if not skills:
         state["messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
         return state
-
-    # Query the LLM to generate a job description
     prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role."
     response = llm.predict(prompt)
-
-    # Update the state with the generated job description
     state["job_description"] = response
     state["messages"].append(AIMessage(content=f"Generated Job Description: {response}"))
-    print("Generated Job Description:", response)
     return state
 
-def update_skills(state: AgentState) -> AgentState:
-    # Extract the user's input
-    user_input = state["input"]
-
-    # Update the skills field based on the user's input
-    if "skills" not in state or not state["skills"]:
-        state["skills"] = user_input
-    else:
-        # Append new skills to the existing list
-        state["skills"] += f", {user_input}"
-
-    # Add a message to indicate the update
-    state["messages"].append(SystemMessage(content=f"Updated skills: {state['skills']}"))
-    print("Updated skills:", state["skills"])
-    return state
-
-
-def generate_job_description(state: AgentState) -> AgentState:
-    # Extract the user's input
-    user_input = state["input"]
-
-    # Update the skills field based on the user's input
-    if "skills" not in state or not state["skills"]:
-        state["skills"] = user_input
-    else:
-        # Append new skills to the existing list
-        state["skills"] += f", {user_input}"
-
-    # Add a message to indicate the update
-    state["messages"].append(f"Updated skills: {state['skills']}")
-    print("Updated skills:", state["skills"])
-    return state
-
-# def increment_field_counter(state: AgentState, field_name: str) -> AgentState:
-#     if "field_counters" not in state:
-#         state["field_counters"] = {}
-#     state["field_counters"][field_name] = state["field_counters"].get(field_name, 0) + 1
-#     return state
 
 # ─── LangGraph Workflow ────────────────────────────────────────────────────────
+checkpointer = MemorySaver()
 workflow = StateGraph(AgentState)
-
 workflow.add_node("initialize_agent", run_agent)
+workflow.add_node("handle_general_query", handle_general_query)
+workflow.add_node("get_skills", get_skills)
 workflow.add_node("update_skills", update_skills)
 workflow.add_node("generate_job_description", generate_job_description)
 
+
 workflow.add_conditional_edges(
     "initialize_agent",
-    should_continue,
-    {"continue": "update_skills", "end": END}
+    lambda s: (
+        "get_skills" if s["intent"] == "hiring"
+        else "handle_general_query" if s["intent"] == "general_query"
+        else "dummy_resume" if s.get("intent") == "__make_graph_happy__"
+        else "end"
+    ),
+    {
+        "get_skills": "get_skills",
+        "handle_general_query": "handle_general_query",
+        "end": END
+    }
 )
 
+workflow.add_edge("get_skills", "update_skills")
+# Normal internal flow after resume
 workflow.add_edge("update_skills", "generate_job_description")
 
-
 workflow.add_conditional_edges(
-    "generate_job_description",
-    lambda state: "end",  # End the workflow after generating the job description
+    "handle_general_query",
+    lambda s: "end",
     {"end": END}
 )
 
+workflow.add_conditional_edges(
+    "generate_job_description",
+    lambda s: "end",
+    {"end": END}
+)
 workflow.set_entry_point("initialize_agent")
-
-graph = workflow.compile()
+graph = workflow.compile(
+    checkpointer=checkpointer, #Needed for resuming sessions
+)
 
 # ─── Flask App ─────────────────────────────────────────────────────────────────
 app = Flask(__name__)
-SESSION_STORE = {}  # Global dictionary for session persistence
 
 @app.route("/chat", methods=["GET", "POST"])
 def chat():
@@ -201,43 +231,58 @@ def chat():
         user_input = request.args.get("chat", "")
         session_id = request.args.get("session_id")
 
-    # Start a new session if not provided or not found
-    if not session_id or session_id not in SESSION_STORE:
-        session_id = session_id or str(uuid.uuid4())
+    if not session_id:
+        return jsonify({"error": "Missing session_id"}), 400
+
+    # Start or resume session
+    if session_id not in SESSION_STORE:
         state = build_initial_state(user_input)
     else:
         state = SESSION_STORE[session_id]
-      
-    state["input"] = user_input
-    state["user_inputs"].append(user_input)
-    state["messages"].append(HumanMessage(content=user_input))
-
-    # Run the LangGraph logic
-    result = graph.invoke(state)
-    agent_outcome = result["agent_outcome"]
-
-    print("State:")
-    print(state)
-
-    # Handle AgentFinish or AgentAction
-    if isinstance(agent_outcome, AgentFinish):
-        reply = state["messages"][-1] if state["messages"] else ""
-    elif isinstance(agent_outcome, AgentAction):
-        reply = f"Action required: {agent_outcome.tool} with input {agent_outcome.tool_input}"
+        # Resume interrupted flow with user's response
+        state["input"] = user_input
+        state["user_inputs"].append(user_input)
+        state["messages"].append(HumanMessage(content=user_input))
+    pdb.set_trace()  # For debugging purposes
+    # Run or resume graph
+    interrupt_info = state.get("__interrupt__")
+    thread_config = {"configurable": {"thread_id": session_id}}
+    if interrupt_info and isinstance(interrupt_info, list) and interrupt_info[0].resumable:
+        resume_value = state["input"]  # e.g., "Java"
+        resume_ns = state["__interrupt__"][0].ns[0]
+        command = Command(resume=resume_value)
+        result = graph.invoke(command, config=thread_config)
     else:
-        reply = "Unexpected outcome from the agent."
+        result = graph.invoke(state,config=thread_config)
 
-    # Save updated state in memory
+    # Handle interrupt
+    if "__interrupt__" in result:
+        SESSION_STORE[session_id] = result
+        return jsonify({
+            "interrupted": True,
+            "question": result["__interrupt__"],
+            "session_id": session_id,
+            "messages": [
+                f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"user: {m.content}"
+                for m in result["messages"]
+            ]
+        })
+
+    # Normal response
     SESSION_STORE[session_id] = result
-
-    messages = [message.content for message in state["messages"]]
+    reply = result["messages"][-1].content if result["messages"] else ""
 
     return jsonify({
-        "user_input": user_input if user_input else "",
-        "reply": messages[-1] if messages else "",
-        "messages": messages,
-        "session_id": session_id
+        "interrupted": False,
+        "reply": reply,
+        "session_id": session_id,
+        "messages": [
+            f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"user: {m.content}"
+            for m in result["messages"]
+        ]
     })
+
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
