@@ -167,7 +167,7 @@ def generate_job_description(state: AgentState) -> AgentState:
     if not skills:
         state["messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
         return state
-    prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role. for {COMPAN_NAME} located at {LOCATION}"
+    prompt = f"Using the following skills: {skills}, generate a professional job description for an HR assistant role. for {COMPANY_NAME} located at {LOCATION}"
     response = llm.predict(prompt)
     state["job_description"] = response
     state["messages"].append(AIMessage(content=f"Generated Job Description: {response}"))
@@ -262,7 +262,7 @@ def chat():
     # Handle interrupt
     if "__interrupt__" in result:
         SESSION_STORE[session_id] = result
-        return jsonify({
+        response = jsonify({
             "interrupted": True,
             "question": result["__interrupt__"],
             "session_id": session_id,
@@ -271,20 +271,21 @@ def chat():
                 for m in result["messages"]
             ]
         })
+    else:
 
-    # Normal response
-    SESSION_STORE[session_id] = result
-    reply = result["messages"][-1].content if result["messages"] else ""
+        # Normal response
+        SESSION_STORE[session_id] = result
+        reply = result["messages"][-1].content if result["messages"] else ""
 
-    response = jsonify({
-        "interrupted": False,
-        "reply": reply,
-        "session_id": session_id,
-        "messages": [
-            f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"human: {m.content}"
-            for m in result["messages"]
-        ]
-    })
+        response = jsonify({
+            "interrupted": False,
+            "reply": reply,
+            "session_id": session_id,
+            "messages": [
+                f"system: {m.content}" if isinstance(m, (AIMessage, SystemMessage)) else f"human: {m.content}"
+                for m in result["messages"]
+            ]
+        })
 
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "*"
