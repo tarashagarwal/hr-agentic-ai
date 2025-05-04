@@ -31,8 +31,9 @@ llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 
 # ─── Agent prompt and runnable setup ─────────────────────────────────────────
 agent_prompt = ChatPromptTemplate.from_messages([
-    ("system",  "Classify the intent and if it is a general query, answer it "
-    "but mention and remember that your skills are best used for hiring related purposes"),
+    ("system",  "Answer what ever the user is asking "
+    "but mention and remember that your skills are best" 
+    "used for hiring related purposes"),
     ("user",    "{input}"),
     ("system",  "{agent_scratchpad}")
 ])
@@ -50,6 +51,7 @@ agent_runnable = create_openai_functions_agent(llm, tools, agent_prompt)
 # ─── Agent State Schema ───────────────────────────────────────────────────────
 class AgentState(TypedDict):
     input: str
+    interrupt_count: int
     terminate: bool
     next_expected_node: str
     user_inputs: List[str]
@@ -67,6 +69,7 @@ class AgentState(TypedDict):
 def build_initial_state(user_input: str) -> AgentState:
     return {
         "input": user_input,
+        "interrupt_count": 0,
         "terminate": False,
         "user_inputs": [],
         "messages": [],
@@ -131,21 +134,30 @@ def handle_general_query(state: AgentState) -> AgentState:
 
 
 def get_skills(state: AgentState) -> AgentState:
-    does_response_has_valid_skiils = False
-    count = 0
-    while not does_response_has_valid_skiils:
-        skills_query = "Can you provide the skills required for the job?" if count == 0 else "Not a valid Skill. Please provide a valid skills such as Java, Python, etc."
-        count += 1
-        state["user_messages"].append(SystemMessage(content=skills_query))
-        skills_required = interrupt(skills_query)
-        does_response_has_valid_skiils = askLLM("Are these skills valid for a Job Description? answer yes or no: " + skills_required).lower() == "yes"
-    return state
+    prompts = [
+        "I will write a job description for this task but before that I need to know the skills required for the job. Please give me a complete list of skills required.",
+        "Not a valid skill. Please provide valid skills such as Java, Python, etc.",
+        "Still seems not a valid skill, check again, however I will proceed with the job description generation this time with whatever you provide."
+    ]
+    max_attempts = 3
+    state["interrupt_count"] = 0
 
+    for attempt in range(max_attempts):
+        # Choose initial vs. retry prompt
+        prompt = prompts[state["interrupt_count"]]
+        state["user_messages"].append(SystemMessage(content=prompt))
 
-def update_skills(state: AgentState) -> AgentState:
-    incoming = state["input"]
-    state["skills"] = incoming if not state["skills"] else f"{state['skills']}, {incoming}"
-    state["next_expected_node"] = "generate_job_description"
+        skills_required = interrupt(prompt)
+        state["interrupt_count"] += 1
+        skills_required = askLLM(
+                f"From this text extract all the possible skills for a job: {skills_required}. Return 'no' only if skills are not there"
+            ).strip()
+        # Validate via LLM; normalize the answer
+        is_valid = ( skills_required.lower() != "no")
+        if is_valid:
+            state["skills"] = skills_required
+            return state  # done as soon as we have valid skills
+
     return state
 
 
@@ -156,7 +168,7 @@ def generate_job_description(state: AgentState) -> AgentState:
         return state
 
     prompt = (
-        f"Using the following skills: {skills}, "
+        f"Using the following skills: {skills} and these skills only, "
         f"generate a professional job description for a Software Engineer"
         f"for {COMPANY_DETAILS['NAME']} located at {COMPANY_DETAILS['LOCATION']}"
         f"having a mission of {COMPANY_DETAILS['MISSION']} and client base of {COMPANY_DETAILS['CLIENTS']}"

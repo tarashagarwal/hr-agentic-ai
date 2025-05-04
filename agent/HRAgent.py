@@ -23,7 +23,6 @@ from agent.agentic_logic import (
     run_agent,
     handle_general_query,
     get_skills,
-    update_skills,
     generate_job_description,
     AgentState
 )
@@ -48,7 +47,6 @@ workflow = StateGraph(AgentState)
 workflow.add_node("initialize_agent", run_agent)
 workflow.add_node("handle_general_query", handle_general_query)
 workflow.add_node("get_skills", get_skills)
-workflow.add_node("update_skills", update_skills)
 workflow.add_node("generate_job_description", generate_job_description)
 
 
@@ -67,16 +65,8 @@ workflow.add_conditional_edges(
     }
 )
 
-workflow.add_conditional_edges(
-    "get_skills",
-    lambda s: "update_skills" if not s.get("terminate", False) else "end",
-    {
-        "update_skills": "update_skills",
-        "end": END
-    }
-)
 # Normal internal flow after resume
-workflow.add_edge("update_skills", "generate_job_description")
+workflow.add_edge("get_skills", "generate_job_description")
 
 workflow.add_conditional_edges(
     "handle_general_query",
@@ -115,14 +105,12 @@ def chat():
         state = build_initial_state(user_input)
     else:
         state = SESSION_STORE[session_id]
-        # Resume interrupted flow with user's response
+        # Resume interrupted flow with user's response        #same as above
+    
     state["input"] = user_input
     state["user_inputs"].append(user_input)
     state["user_messages"].append(HumanMessage(content=user_input))
-    state["agent_scratchpad"] = "" #Dont want llm to misclassify the intent based on previous activity
-    state["intermediate_steps"] = []
-    state["intent"] = ""            #same as above
-
+    
     # Run or resume graph
     interrupt_info = state.get("__interrupt__")
     thread_config = {"configurable": {"thread_id": session_id}}
@@ -132,10 +120,12 @@ def chat():
         command = Command(resume=resume_value)
         result = graph.invoke(command, config=thread_config)
     else:
+        state["agent_scratchpad"] = "" #Dont want llm to misclassify the intent based on previous activity
+        state["intermediate_steps"] = []
+        state["intent"] = ""    
         result = graph.invoke(state, config=thread_config)
         
     print(state)
-    #pdb.set_trace()
     
     # Handle interrupt
     if "__interrupt__" in result:

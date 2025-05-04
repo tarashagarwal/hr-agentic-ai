@@ -17,14 +17,28 @@ llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 
 @tool("classify_intent", return_direct=True)
 def classify_intent(input_text: str) -> str:
-    """Classify the user's intent into one of: hiring, general_query, greeting, feedback, unknown."""
+    """Classify the user's intent into one of: hiring, general_query."""
+
+    examples = []
+    try:
+        with open("data/hiring_intent.txt", "r") as f:
+            examples = [line.strip() for line in f.readlines() if line.strip()]
+    except FileNotFoundError:
+        print("⚠️ hiring_intent.txt file not found. Proceeding without examples.")
+
+    examples_text = "\n".join(f"- {ex}" for ex in examples)
+
     prompt = f"""
 You are an intent classifier. Read the following user input and classify the intent into one of these categories:
-"hiring", "general_query".
+"hiring" or "general_query".
 
-User input: "{input_text}"
+Examples of *hiring* intent:
+{examples_text}
 
-Just return one of the two categories, nothing else.
+Now classify this user input:
+"{input_text}"
+
+Just return one of the two categories: hiring or general_query.
 """
 
     result = llm.invoke(prompt)
