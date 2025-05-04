@@ -267,8 +267,15 @@ def generate_job_description(state: AgentState) -> AgentState:
     # 5) If this was the first draft, ask whether to loop for a second
     if not is_second_draft:
         answer = interrupt("Do you need another draft?")
-        decision = askLLM(f"Interpret this as 'yes' or 'no': {answer}").lower().strip()
-        state["additional_drafts"] = (decision == "yes")
+        decision = askLLM(
+            f"I have asked user if they need another job draft and they have replied: '{answer}'. "
+            "If user ask any other question or is vague, classify it as no"
+            "Classify this as 'yes' or 'no' only"
+        ).lower().strip()
+        need_more = (decision == "yes")
+        if not need_more:
+            message= "Seems you are not interested in another draft. Let me know what else I can help you with."
+            state["user_messages"].append(AIMessage(content=message))
     else:
         # we only allow two drafts, so reset the flag
         state["additional_drafts"] = False
