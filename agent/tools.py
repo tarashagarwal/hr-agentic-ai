@@ -15,13 +15,16 @@ load_dotenv(dotenv_path)
 
 llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 
+here = os.path.dirname(__file__)
+hiring_intent_data_file = os.path.join(here, "data", "hiring_intent.txt")
+
 @tool("classify_intent", return_direct=True)
 def classify_intent(input_text: str) -> str:
     """Classify the user's intent into one of: hiring, general_query."""
 
     examples = []
     try:
-        with open("data/hiring_intent.txt", "r") as f:
+        with open(hiring_intent_data_file, "r") as f:
             examples = [line.strip() for line in f.readlines() if line.strip()]
     except FileNotFoundError:
         print("⚠️ hiring_intent.txt file not found. Proceeding without examples.")

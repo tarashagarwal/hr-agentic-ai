@@ -8,11 +8,14 @@ from langchain_core.agents import AgentAction, AgentFinish
 from langchain.agents.openai_functions_agent.base import create_openai_functions_agent
 from langgraph.types import interrupt
 from langchain.tools import tool
-from typing import Annotated, Union, List, Optional
+from typing import Annotated, Union, List, Dict, Any, Optional
 from typing_extensions import TypedDict, Literal
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 import operator
 import pdb
+import json
+
+
 # ─── Constants ────────────────────────────────────────────────────────────────
 from agent.tools import tools, tools_map
 from agent.config import COMPANY_DETAILS
@@ -57,13 +60,9 @@ class AgentState(TypedDict):
     messages: List[BaseMessage]
     user_messages: List[BaseMessage]
     ################job attributes#################
-    job_title: Optional[str]  # Added job_title for clarity
-    skills: Optional[str]
-    pay_range: Optional[str]
-    timeline: Optional[str]
-    educational_requirements: Optional[str]
-    job_type: Optional[str]
-    key_responsibilities: Optional[str]
+    job_details: Dict[str, str]
+    required_fields: List[tuple[str, str]]
+    job_details_missing: bool
     ###############################################
     intent: str
     agent_outcome: Union[AgentAction, AgentFinish, None]
@@ -81,12 +80,15 @@ def build_initial_state(user_input: str) -> AgentState:
         "user_inputs": [],
         "messages": [],
         "user_messages": [],
-        "job_title": None,
-        "skills": None,
-        "pay_range": None,
-        "timeline": None,
-        "educational_requirements": None,
-        "job_type": None,
+        "job_details": {},
+        "required_fields": [
+                {"job_title": "Job Title"},
+                {"skills": "Skills"},
+                {"pay_range": "Pay Range"},
+                {"start_date": "Start Date"},
+                {"education": "Educational Requirements"},
+            ],
+        "job_details_missing": True,
         "key_responsibilities": None,
         "intent": "",
         "agent_outcome": None,
@@ -172,75 +174,103 @@ def handle_general_query(state: AgentState) -> AgentState:
     state["user_messages"].append(AIMessage(content=resp))
     return state
 
-def get_jobtitle(state: AgentState) -> AgentState:
-    prompts = [
-        "I will write a job description for this task but before that I need to know the job title. Can you give me one?",
-        "Not a valid Job Title. Please provide valid Job Title; provide some job title such as Software Engineer, Data Scientist, etc.",
-        "Still seems not a valid Job Title, check again, however I will proceed with the job description generation this time with whatever you provide."
-    ]
-    validation_prompt = (
-        "From this text extract the job title if present or make one from this information: {user_input}. "
-        "Return 'no' only if job title is not appropriate or not there."
+
+def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
+    required_fields = state["required_fields"]
+
+    ordered_list = "\n".join(
+        f"{i+1}. {list(d.values())[0]}"
+        for i, d in enumerate(required_fields)
     )
-    return get_validated_input(state, "job_title", prompts, validation_prompt)
+
+    # Build the question
+    if not state.get("job_details"):
+        question = (
+            f"It seems we should hire a few people for {COMPANY_DETAILS['NAME']}. "
+            "I can help you with that, but first I need to know a few details:\n"
+            f"{ordered_list}"
+        )
+    else:
 
 
-def get_skills(state: AgentState) -> AgentState:
-    prompts = [
-        "Now I need Skills for the job. Please give me a complete list of skills required.",
-        "Not a valid skill. Please provide valid skills such as Java, Python, etc.",
-        "Still seems not a valid skill, check again, however I will proceed with the job description generation this time with whatever you provide."
-    ]
-    validation_prompt = (
-        "From this text extract all the possible skills for a job: {user_input}. "
-        "Return 'no' only if skills are not there."
+        fields = [(k, v) for entry in required_fields for k, v in entry.items()]
+        missing_labels = [label for key, label in fields if label not in  state.get("job_details")]
+
+        if not missing_labels:
+            state["job_details_missing"] = False 
+            return state
+
+        numbered_bullets = "\n".join(
+                f"{i+1}. {label}"
+                for i, label in enumerate(missing_labels)
+        )
+
+        question = (
+            "Some details are still missing. Please provide the following:\n\n"
+            f"{numbered_bullets}"
+        )
+
+    # Ask the user and record the prompt
+    state["user_messages"].append(AIMessage(content=question))
+
+    #####Interrupt Here####
+    user_input = interrupt(question)
+
+
+    # 3) Extract whatever fields they gave us
+    extract_prompt = (
+        f"These are required fields:\n{ordered_list}\n\n"
+        f"We have these state data: {state['job_details']}"
+        f"The user has input this: {user_input}"
+        "Please extract data from the user input and map to the data fields missing in state data"
+        "Only for keys for which data can be mapped and return as a JSON String"
     )
-    return get_validated_input(state, "skills", prompts, validation_prompt)
 
-def get_jobtitle(state: AgentState) -> AgentState:
-    prompts = [
-        "I will write a job description for this task but before that I need to know the job title. Can you give me one?",
-        "Not a valid Job Title. Please provide valid Job Title; provide some job title such as Software Engineer, Data Scientist, etc.",
-        "Still seems not a valid Job Title, check again, however I will proceed with the job description generation this time with whatever you provide."
-    ]
-    validation_prompt = (
-        "From this text extract the job title if present or make one from this information: {user_input}. "
-        "Return 'no' only if job title is not appropriate or not there."
+    extracted = askLLM(extract_prompt).strip()
+
+    parsed: Dict[str, Any] = json.loads(extracted)
+    job_details: Dict[str, str] = {}
+
+    for key, value in parsed.items():
+        if isinstance(value, list):
+            # join lists into comma-separated strings
+            job_details[key] = ", ".join(value)
+        else:
+            job_details[key] = str(value)
+
+        
+    state["job_details"].update(job_details)
+
+    return state
+
+
+def are_job_details_missing(state: AgentState, max_attempts: int = 5) -> AgentState:
+    pdb.set_trace()
+    question_prompt = (
+        f"I need these fields:\n{bullet_list}\n\n"
+        f"I already have these: {state['job_details']}"
+        "Is any detail missing? answer yes or no"
     )
-    return get_validated_input(state, "job_title", prompts, validation_prompt)
-
-
-def get_pay(state: AgentState) -> AgentState:
-    prompts = [
-        "Now I need the pay range for this job. So please provide a range or a specific amount.",
-        "Not a valid pay. Please provide pay as a range or a specific amount, such as 50000-60000 or 55000.",
-        "I still seems not valid, please check again, however I will proceed without it seems incorrect again this time."
-    ]
-    validation_prompt = (
-        "From this text extract the pay range, it could be in words: {user_input}. "
-        "Return 'no' only if payrange cannot be extracted or determined from this input."
-    )
-    return get_validated_input(state, "pay_range", prompts, validation_prompt)
+    
+    answer = askLLM(question_prompt).strip()
+    state["job_details_missing"] = (answer.lower() == "yes")
+    return state
 
 
 def generate_job_description(state: AgentState) -> AgentState:
-    skills = state.get("skills", "Not provided")
-    job_title = state.get("job_title", "Not provided")
-    pay_range = state.get("pay_range", "Not provided")
-    if not skills:
-        state["user_messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
-        return state
+
+        job_details = state.get("job_details", {})
+        aggregated_job_details = " ".join(f"{k}: {v}" for k, v in job_details.items()
 
     prompt = (
-        f"Using the following skills: {skills} and these skills only"
-        f"generate a professional job description for a {job_title} position."
         f"for {COMPANY_DETAILS['NAME']} located at {COMPANY_DETAILS['LOCATION']}"
         f"having a mission of {COMPANY_DETAILS['MISSION']} and client base of {COMPANY_DETAILS['CLIENTS']}"
+        f"create a job description given the following: {aggregated_job_details}"
         f"The Company HR should be contacter at: {COMPANY_DETAILS['EMAIL']}. "
-        f"Having a pay range of {pay_range}."
     )
 
     resp = llm.predict(prompt)
     state["job_description"] = resp
     state["user_messages"].append(AIMessage(content=f"Generated Job Description: {resp}"))
+    state["job_details"] = "" #clearing all the job details gatehered so far to clean up for next job
     return state
