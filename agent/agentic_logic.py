@@ -261,7 +261,7 @@ def generate_job_description(state: AgentState) -> AgentState:
     draft = llm.predict(prompt)
     message = f"Here is your {focus} draft:\n\n{draft}\n\n"
     if not is_second_draft:
-        message += "Would you like another draft focused on technical fit?"
+        message += "**Would you like another draft focused on technical fit?**"
     state["user_messages"].append(AIMessage(content=message))
 
     # 5) If this was the first draft, ask whether to loop for a second

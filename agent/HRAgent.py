@@ -11,6 +11,7 @@ import uuid
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain.agents.openai_functions_agent.base import create_openai_functions_agent
+from langchain.callbacks.tracers.langchain import LangChainTracer
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt, Command
 from langgraph.checkpoint.memory import MemorySaver
@@ -35,6 +36,7 @@ dotenv_path = find_dotenv(".env.local")
 if not dotenv_path:
     raise FileNotFoundError("Could not find .env.local in any parent folder")
 load_dotenv(dotenv_path)
+tracer = LangChainTracer()
 
 os.environ["OPENAI_API_KEY"]    = os.getenv("OPENAI_API_KEY")
 os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
@@ -124,7 +126,7 @@ def chat():
     
     # Run or resume graph
     interrupt_info = state.get("__interrupt__")
-    thread_config = {"configurable": {"thread_id": session_id}}
+    thread_config = {"callbacks": [tracer], "configurable": {"thread_id": session_id}}
     if interrupt_info and isinstance(interrupt_info, list) and interrupt_info[0].resumable:
         resume_value = state["input"]  # e.g., "Java"
         resume_ns = state["__interrupt__"][0].ns[0]
