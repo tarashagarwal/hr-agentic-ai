@@ -186,7 +186,7 @@ def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
     # Build the question
     if not state.get("job_details"):
         question = (
-            f"It seems we should hire a few people for {COMPANY_DETAILS['NAME']}. "
+            f"I can help you with this {COMPANY_DETAILS['NAME']}. "
             "I can help you with that, but first I need to know a few details:\n"
             f"{ordered_list}"
         )
@@ -259,9 +259,9 @@ def are_job_details_missing(state: AgentState, max_attempts: int = 5) -> AgentSt
 
 def generate_job_description(state: AgentState) -> AgentState:
 
-        job_details = state.get("job_details", {})
-        aggregated_job_details = " ".join(f"{k}: {v}" for k, v in job_details.items()
-
+    job_details = state.get("job_details", {})
+    aggregated_job_details = (" ".join(f"{k}: {v}" for k, v in job_details.items()))
+    
     prompt = (
         f"for {COMPANY_DETAILS['NAME']} located at {COMPANY_DETAILS['LOCATION']}"
         f"having a mission of {COMPANY_DETAILS['MISSION']} and client base of {COMPANY_DETAILS['CLIENTS']}"
