@@ -57,7 +57,15 @@ class AgentState(TypedDict):
     user_inputs: List[str]
     messages: List[BaseMessage]
     user_messages: List[BaseMessage]
+    ################job attributes#################
+    job_title: Optional[str]  # Added job_title for clarity
     skills: Optional[str]
+    budget: Optional[str]
+    timeline: Optional[str]
+    educational_requirements: Optional[str]
+    job_type: Optional[str]
+    key_responsibilities: Optional[str]
+    ###############################################
     intent: str
     agent_outcome: Union[AgentAction, AgentFinish, None]
     agent_scratchpad: str
@@ -132,10 +140,39 @@ def handle_general_query(state: AgentState) -> AgentState:
     state["user_messages"].append(AIMessage(content=resp))
     return state
 
+def get_jobtitle(state: AgentState) -> AgentState:
+    prompts = [
+        "I will write a job description for this task but before that I need to know the job title. Can you give me one?",
+        "Not a valid Job Title. Please provide valid Job Title; provide some job title such as Software Engineer, Data Scientist, etc.",
+        "Still seems not a valid Job Title, check again, however I will proceed with the job description generation this time with whatever you provide."
+    ]
+    max_attempts = 3
+    state["interrupt_count"] = 0
+
+    for attempt in range(max_attempts):
+        # Choose initial vs. retry prompt
+        prompt = prompts[state["interrupt_count"]]
+        state["user_messages"].append(SystemMessage(content=prompt))
+
+        job_title = interrupt(prompt)
+        state["interrupt_count"] += 1
+        job_title = askLLM(
+                f"From this text extract the job title if present or make one from this information{job_title}. Return 'no' only if job title is not appropriate or not there"
+            ).strip()
+        # Validate via LLM; normalize the answer
+        pdb.set_trace()
+        is_valid = ( job_title.lower() != "no")
+        if is_valid:
+            state["job_title"] = job_title
+            return state  # done as soon as we have valid skills
+
+    state["interrupt_count"] = 0
+    return state
+
 
 def get_skills(state: AgentState) -> AgentState:
     prompts = [
-        "I will write a job description for this task but before that I need to know the skills required for the job. Please give me a complete list of skills required.",
+        "Now I need Skills for the job. Please give me a complete list of skills required.",
         "Not a valid skill. Please provide valid skills such as Java, Python, etc.",
         "Still seems not a valid skill, check again, however I will proceed with the job description generation this time with whatever you provide."
     ]
@@ -157,7 +194,8 @@ def get_skills(state: AgentState) -> AgentState:
         if is_valid:
             state["skills"] = skills_required
             return state  # done as soon as we have valid skills
-
+    
+    state["interrupt_count"] = 0
     return state
 
 
@@ -172,6 +210,7 @@ def generate_job_description(state: AgentState) -> AgentState:
         f"generate a professional job description for a Software Engineer"
         f"for {COMPANY_DETAILS['NAME']} located at {COMPANY_DETAILS['LOCATION']}"
         f"having a mission of {COMPANY_DETAILS['MISSION']} and client base of {COMPANY_DETAILS['CLIENTS']}"
+        f"The Company HR should be contacter at: {COMPANY_DETAILS['EMAIL']}. "
     )
     resp = llm.predict(prompt)
     state["job_description"] = resp

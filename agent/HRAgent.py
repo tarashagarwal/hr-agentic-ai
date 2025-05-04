@@ -22,6 +22,7 @@ from agent.agentic_logic import (
     build_initial_state,
     run_agent,
     handle_general_query,
+    get_jobtitle,
     get_skills,
     generate_job_description,
     AgentState
@@ -46,6 +47,7 @@ checkpointer = MemorySaver()
 workflow = StateGraph(AgentState)
 workflow.add_node("initialize_agent", run_agent)
 workflow.add_node("handle_general_query", handle_general_query)
+workflow.add_node("get_jobtitle", get_jobtitle)
 workflow.add_node("get_skills", get_skills)
 workflow.add_node("generate_job_description", generate_job_description)
 
@@ -53,19 +55,15 @@ workflow.add_node("generate_job_description", generate_job_description)
 workflow.add_conditional_edges(
     "initialize_agent",
     lambda s: (
-        "get_skills" if s["intent"] == "hiring"
+        "get_jobtitle" if s["intent"] == "hiring"
         else "handle_general_query" if s["intent"] == "general_query"
         else "dummy_resume" if s.get("intent") == "__make_graph_happy__"
         else "end"
-    ),
-    {
-        "get_skills": "get_skills",
-        "handle_general_query": "handle_general_query",
-        "end": END
-    }
+    )
 )
 
 # Normal internal flow after resume
+workflow.add_edge("get_jobtitle", "get_skills")
 workflow.add_edge("get_skills", "generate_job_description")
 
 workflow.add_conditional_edges(
