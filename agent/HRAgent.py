@@ -24,6 +24,7 @@ from agent.agentic_logic import (
     handle_general_query,
     get_jobtitle,
     get_skills,
+    get_pay,
     generate_job_description,
     AgentState
 )
@@ -49,6 +50,7 @@ workflow.add_node("initialize_agent", run_agent)
 workflow.add_node("handle_general_query", handle_general_query)
 workflow.add_node("get_jobtitle", get_jobtitle)
 workflow.add_node("get_skills", get_skills)
+workflow.add_node("get_pay", get_pay)
 workflow.add_node("generate_job_description", generate_job_description)
 
 
@@ -64,7 +66,8 @@ workflow.add_conditional_edges(
 
 # Normal internal flow after resume
 workflow.add_edge("get_jobtitle", "get_skills")
-workflow.add_edge("get_skills", "generate_job_description")
+workflow.add_edge("get_skills", "get_pay")
+workflow.add_edge("get_pay", "generate_job_description")
 
 workflow.add_conditional_edges(
     "handle_general_query",

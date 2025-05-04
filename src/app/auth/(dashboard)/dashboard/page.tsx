@@ -91,7 +91,7 @@ export default function HRLangGraphUI() {
                 <ReactMarkdown>{msg.text}</ReactMarkdown>
               </div>
             ))}
-            {isLoading && <div className="text-gray-400 italic">Typing...</div>}
+            {isLoading && <div className="text-gray-400 italic">Thinking...</div>}
             <div ref={chatRef} />
           </div>
 

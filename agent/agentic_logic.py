@@ -53,14 +53,13 @@ class AgentState(TypedDict):
     input: str
     interrupt_count: int
     terminate: bool
-    next_expected_node: str
     user_inputs: List[str]
     messages: List[BaseMessage]
     user_messages: List[BaseMessage]
     ################job attributes#################
     job_title: Optional[str]  # Added job_title for clarity
     skills: Optional[str]
-    budget: Optional[str]
+    pay_range: Optional[str]
     timeline: Optional[str]
     educational_requirements: Optional[str]
     job_type: Optional[str]
@@ -82,7 +81,13 @@ def build_initial_state(user_input: str) -> AgentState:
         "user_inputs": [],
         "messages": [],
         "user_messages": [],
+        "job_title": None,
         "skills": None,
+        "pay_range": None,
+        "timeline": None,
+        "educational_requirements": None,
+        "job_type": None,
+        "key_responsibilities": None,
         "intent": "",
         "agent_outcome": None,
         "agent_scratchpad": "",
@@ -103,7 +108,34 @@ def askLLM(query: str) -> str:
     except Exception as e:
         print(f"[Error]: {str(e)}")
 
-    
+
+def get_validated_input(
+    state: AgentState,
+    field_name: str,
+    prompts: list[str],
+    llm_validation_prompt_template: str,
+) -> AgentState:
+    max_attempts = len(prompts)
+    state["interrupt_count"] = 0
+
+    for attempt in range(max_attempts):
+        prompt = prompts[attempt]
+        state["user_messages"].append(SystemMessage(content=prompt))
+
+        user_input = interrupt(prompt)
+        state["interrupt_count"] += 1
+
+        validated_response = askLLM(
+            llm_validation_prompt_template.format(user_input=user_input)
+        ).strip()
+
+        if validated_response.lower() != "no":
+            state[field_name] = validated_response
+            return state
+
+    state["interrupt_count"] = 0
+    return state
+
 
 
 # ─── State transition functions ────────────────────────────────────────────────
@@ -146,28 +178,11 @@ def get_jobtitle(state: AgentState) -> AgentState:
         "Not a valid Job Title. Please provide valid Job Title; provide some job title such as Software Engineer, Data Scientist, etc.",
         "Still seems not a valid Job Title, check again, however I will proceed with the job description generation this time with whatever you provide."
     ]
-    max_attempts = 3
-    state["interrupt_count"] = 0
-
-    for attempt in range(max_attempts):
-        # Choose initial vs. retry prompt
-        prompt = prompts[state["interrupt_count"]]
-        state["user_messages"].append(SystemMessage(content=prompt))
-
-        job_title = interrupt(prompt)
-        state["interrupt_count"] += 1
-        job_title = askLLM(
-                f"From this text extract the job title if present or make one from this information{job_title}. Return 'no' only if job title is not appropriate or not there"
-            ).strip()
-        # Validate via LLM; normalize the answer
-        pdb.set_trace()
-        is_valid = ( job_title.lower() != "no")
-        if is_valid:
-            state["job_title"] = job_title
-            return state  # done as soon as we have valid skills
-
-    state["interrupt_count"] = 0
-    return state
+    validation_prompt = (
+        "From this text extract the job title if present or make one from this information: {user_input}. "
+        "Return 'no' only if job title is not appropriate or not there."
+    )
+    return get_validated_input(state, "job_title", prompts, validation_prompt)
 
 
 def get_skills(state: AgentState) -> AgentState:
@@ -176,42 +191,55 @@ def get_skills(state: AgentState) -> AgentState:
         "Not a valid skill. Please provide valid skills such as Java, Python, etc.",
         "Still seems not a valid skill, check again, however I will proceed with the job description generation this time with whatever you provide."
     ]
-    max_attempts = 3
-    state["interrupt_count"] = 0
+    validation_prompt = (
+        "From this text extract all the possible skills for a job: {user_input}. "
+        "Return 'no' only if skills are not there."
+    )
+    return get_validated_input(state, "skills", prompts, validation_prompt)
 
-    for attempt in range(max_attempts):
-        # Choose initial vs. retry prompt
-        prompt = prompts[state["interrupt_count"]]
-        state["user_messages"].append(SystemMessage(content=prompt))
+def get_jobtitle(state: AgentState) -> AgentState:
+    prompts = [
+        "I will write a job description for this task but before that I need to know the job title. Can you give me one?",
+        "Not a valid Job Title. Please provide valid Job Title; provide some job title such as Software Engineer, Data Scientist, etc.",
+        "Still seems not a valid Job Title, check again, however I will proceed with the job description generation this time with whatever you provide."
+    ]
+    validation_prompt = (
+        "From this text extract the job title if present or make one from this information: {user_input}. "
+        "Return 'no' only if job title is not appropriate or not there."
+    )
+    return get_validated_input(state, "job_title", prompts, validation_prompt)
 
-        skills_required = interrupt(prompt)
-        state["interrupt_count"] += 1
-        skills_required = askLLM(
-                f"From this text extract all the possible skills for a job: {skills_required}. Return 'no' only if skills are not there"
-            ).strip()
-        # Validate via LLM; normalize the answer
-        is_valid = ( skills_required.lower() != "no")
-        if is_valid:
-            state["skills"] = skills_required
-            return state  # done as soon as we have valid skills
-    
-    state["interrupt_count"] = 0
-    return state
+
+def get_pay(state: AgentState) -> AgentState:
+    prompts = [
+        "Now I need the pay range for this job. So please provide a range or a specific amount.",
+        "Not a valid pay. Please provide pay as a range or a specific amount, such as 50000-60000 or 55000.",
+        "I still seems not valid, please check again, however I will proceed without it seems incorrect again this time."
+    ]
+    validation_prompt = (
+        "From this text extract the pay range, it could be in words: {user_input}. "
+        "Return 'no' only if payrange cannot be extracted or determined from this input."
+    )
+    return get_validated_input(state, "pay_range", prompts, validation_prompt)
 
 
 def generate_job_description(state: AgentState) -> AgentState:
-    skills = state["skills"]
+    skills = state.get("skills", "Not provided")
+    job_title = state.get("job_title", "Not provided")
+    pay_range = state.get("pay_range", "Not provided")
     if not skills:
         state["user_messages"].append(SystemMessage(content="No skills provided. Cannot prepare a job description."))
         return state
 
     prompt = (
-        f"Using the following skills: {skills} and these skills only, "
-        f"generate a professional job description for a Software Engineer"
+        f"Using the following skills: {skills} and these skills only"
+        f"generate a professional job description for a {job_title} position."
         f"for {COMPANY_DETAILS['NAME']} located at {COMPANY_DETAILS['LOCATION']}"
         f"having a mission of {COMPANY_DETAILS['MISSION']} and client base of {COMPANY_DETAILS['CLIENTS']}"
         f"The Company HR should be contacter at: {COMPANY_DETAILS['EMAIL']}. "
+        f"Having a pay range of {pay_range}."
     )
+
     resp = llm.predict(prompt)
     state["job_description"] = resp
     state["user_messages"].append(AIMessage(content=f"Generated Job Description: {resp}"))
