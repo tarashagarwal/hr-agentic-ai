@@ -55,12 +55,12 @@ agent_runnable = create_openai_functions_agent(llm, tools, agent_prompt)
 class AgentState(TypedDict):
     input: str
     interrupt_count: int
-    terminate: bool
     user_inputs: List[str]
     messages: List[BaseMessage]
     user_messages: List[BaseMessage]
     ################job attributes#################
     job_details: Dict[str, str]
+    additional_drafts: bool
     required_fields: List[tuple[str, str]]
     job_details_missing: bool
     ###############################################
@@ -68,7 +68,6 @@ class AgentState(TypedDict):
     agent_outcome: Union[AgentAction, AgentFinish, None]
     agent_scratchpad: str
     intermediate_steps: Annotated[List[tuple[AgentAction, str]], operator.add]
-    job_description: Optional[str]
 
 
 # ─── Helper for initial state ─────────────────────────────────────────────────
@@ -76,11 +75,11 @@ def build_initial_state(user_input: str) -> AgentState:
     return {
         "input": user_input,
         "interrupt_count": 0,
-        "terminate": False,
         "user_inputs": [],
         "messages": [],
         "user_messages": [],
         "job_details": {},
+        "additional_drafts" : False,
         "required_fields": [
                 {"job_title": "Job Title"},
                 {"skills": "Skills"},
@@ -94,7 +93,6 @@ def build_initial_state(user_input: str) -> AgentState:
         "agent_outcome": None,
         "agent_scratchpad": "",
         "intermediate_steps": [],
-        "job_description": None,
     }
 
 def askLLM(query: str) -> str:
@@ -243,34 +241,36 @@ def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
 
     return state
 
-
-def are_job_details_missing(state: AgentState, max_attempts: int = 5) -> AgentState:
-    pdb.set_trace()
-    question_prompt = (
-        f"I need these fields:\n{bullet_list}\n\n"
-        f"I already have these: {state['job_details']}"
-        "Is any detail missing? answer yes or no"
-    )
-    
-    answer = askLLM(question_prompt).strip()
-    state["job_details_missing"] = (answer.lower() == "yes")
-    return state
-
-
 def generate_job_description(state: AgentState) -> AgentState:
+    # 1) Aggregate details once
+    details = " ".join(f"{k}: {v}" for k, v in state.get("job_details", {}).items())
 
-    job_details = state.get("job_details", {})
-    aggregated_job_details = (" ".join(f"{k}: {v}" for k, v in job_details.items()))
-    
+    # 2) Decide which focus we want
+    is_second_draft = state.get("additional_drafts", False)
+    focus = "technical fit" if is_second_draft else "cultural fit"
+
+    # 3) Build a single prompt template
     prompt = (
-        f"for {COMPANY_DETAILS['NAME']} located at {COMPANY_DETAILS['LOCATION']}"
-        f"having a mission of {COMPANY_DETAILS['MISSION']} and client base of {COMPANY_DETAILS['CLIENTS']}"
-        f"create a job description given the following: {aggregated_job_details}"
-        f"The Company HR should be contacter at: {COMPANY_DETAILS['EMAIL']}. "
+        f"For {COMPANY_DETAILS['NAME']} in {COMPANY_DETAILS['LOCATION']}, "
+        f"with mission “{COMPANY_DETAILS['MISSION']}” and clients {COMPANY_DETAILS['CLIENTS']}, "
+        f"create a job description focused on {focus}, given these details: {details}. "
+        f"Contact HR at {COMPANY_DETAILS['EMAIL']}."
     )
 
-    resp = llm.predict(prompt)
-    state["job_description"] = resp
-    state["user_messages"].append(AIMessage(content=f"Generated Job Description: {resp}"))
-    state["job_details"] = "" #clearing all the job details gatehered so far to clean up for next job
+    # 4) Get the draft and append to messages
+    draft = llm.predict(prompt)
+    message = f"Here is your {focus} draft:\n\n{draft}\n\n"
+    if not is_second_draft:
+        message += "Would you like another draft focused on technical fit?"
+    state["user_messages"].append(AIMessage(content=message))
+
+    # 5) If this was the first draft, ask whether to loop for a second
+    if not is_second_draft:
+        answer = interrupt("Do you need another draft?")
+        decision = askLLM(f"Interpret this as 'yes' or 'no': {answer}").lower().strip()
+        state["additional_drafts"] = (decision == "yes")
+    else:
+        # we only allow two drafts, so reset the flag
+        state["additional_drafts"] = False
+
     return state

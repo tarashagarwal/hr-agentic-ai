@@ -23,7 +23,6 @@ from agent.agentic_logic import (
     run_agent,
     handle_general_query,
     collect_job_details,
-    are_job_details_missing,
     generate_job_description,
     AgentState
 )
@@ -74,17 +73,23 @@ workflow.add_conditional_edges(
 # workflow.add_edge("get_skills", "get_pay")
 # workflow.add_edge("get_pay", "generate_job_description")
 
+
+workflow.add_conditional_edges(
+    "generate_job_description",
+    # if additional_drafts is True, loop back; otherwise finish
+    lambda s: "generate_job_description" if s.get("additional_drafts") else "end",
+    {
+      "generate_job_description": "generate_job_description",
+      "end": END
+    }
+)
+
 workflow.add_conditional_edges(
     "handle_general_query",
     lambda s: "end",
     {"end": END}
 )
 
-workflow.add_conditional_edges(
-    "generate_job_description",
-    lambda s: "end",
-    {"end": END}
-)
 workflow.set_entry_point("initialize_agent")
 graph = workflow.compile(
     checkpointer=checkpointer, #Needed for resuming sessions
