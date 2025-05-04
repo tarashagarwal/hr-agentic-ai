@@ -23,6 +23,8 @@ from agent.agentic_logic import (
     build_initial_state,
     run_agent,
     handle_general_query,
+    handle_hiring_query,
+    profile_match,
     collect_job_details,
     generate_job_description,
     AgentState
@@ -48,6 +50,8 @@ checkpointer = MemorySaver()
 workflow = StateGraph(AgentState)
 workflow.add_node("initialize_agent", run_agent)
 workflow.add_node("handle_general_query", handle_general_query)
+workflow.add_node("profile_match", profile_match)
+workflow.add_node("handle_hiring_query", handle_hiring_query)
 workflow.add_node("collect_job_details", collect_job_details)
 # workflow.add_node("are_job_details_missing", are_job_details_missing)
 workflow.add_node("generate_job_description", generate_job_description)
@@ -56,17 +60,20 @@ workflow.add_node("generate_job_description", generate_job_description)
 workflow.add_conditional_edges(
     "initialize_agent",
     lambda s: (
-        "collect_job_details" if s["intent"] == "hiring"
+        "handle_hiring_query" if s["intent"] == "hiring"
         else "handle_general_query" if s["intent"] == "general_query"
-        else "dummy_resume" if s.get("intent") == "__make_graph_happy__"
         else "end"
     )
 )
 
 
-# workflow.add_edge("collect_job_details", "job_details_missing")
-
 # Normal internal flow after resume
+
+workflow.add_conditional_edges(
+    "handle_hiring_query",
+    lambda s: "profile_match" if s.get("hiring_support_option") == 1 else "collect_job_details"
+)
+
 workflow.add_conditional_edges(
     "collect_job_details",
     lambda s: "collect_job_details" if s.get("job_details_missing") else "generate_job_description"

@@ -48,6 +48,13 @@ system_query_prompt = ChatPromptTemplate.from_messages([
     ("system",  "{agent_scratchpad}")
 ])
 
+HR_ACTIONS = [
+    "1. Get a Matching Score for Profile and Job Description",
+    "2. Prepare a Job Description",
+    "3. Create a hiring plan"
+]
+
+
 
 agent_runnable = create_openai_functions_agent(llm, tools, agent_prompt)
 
@@ -64,6 +71,7 @@ class AgentState(TypedDict):
     required_fields: List[tuple[str, str]]
     job_details_missing: bool
     ###############################################
+    hiring_support_option: int
     intent: str
     agent_outcome: Union[AgentAction, AgentFinish, None]
     agent_scratchpad: str
@@ -88,6 +96,7 @@ def build_initial_state(user_input: str) -> AgentState:
                 {"education": "Educational Requirements"},
             ],
         "job_details_missing": True,
+        "hiring_support_option": None,
         "key_responsibilities": None,
         "intent": "",
         "agent_outcome": None,
@@ -172,6 +181,33 @@ def handle_general_query(state: AgentState) -> AgentState:
     state["user_messages"].append(AIMessage(content=resp))
     return state
 
+def handle_hiring_query(state: AgentState) -> AgentState:
+   
+    state["hiring_support_option"] = None #resetting
+    
+    prompt = (
+        "User has requested for hiring support and we need to help"
+        "Please take the user under confidence that we can help and"
+        f"Tell them that there are three ways: {HR_ACTIONS} Give a ordered list in same order"
+    )
+
+    intro_message = askLLM(prompt).strip()
+    pdb.set_trace()
+    state["user_messages"].append(AIMessage(content=intro_message))
+
+    option_chosen = interrupt("Choose the option")
+
+    prompt = f"User had options {HR_ACTIONS} and has chosen '{option_chosen}'. Give me the number that the user has chosen"
+    option_chosen_by_user = int(askLLM(prompt).strip())
+    state["hiring_support_option"] = option_chosen_by_user
+
+    return state
+
+
+def profile_match(state: AgentState) -> AgentState:
+    resp = "Will Match Whatever You wish"
+    state["user_messages"].append(AIMessage(content=resp))
+    return state
 
 def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
     required_fields = state["required_fields"]

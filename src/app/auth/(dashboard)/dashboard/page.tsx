@@ -84,11 +84,17 @@ export default function HRLangGraphUI() {
             {user_messages.map((msg, index) => (
               <div
                 key={index}
-                className={`p-3 rounded-lg w-fit max-w-[80%] text-lg whitespace-pre-wrap ${
+                className={`prose prose-sm p-3 rounded-lg w-fit max-w-[80%] text-lg whitespace-pre-wrap ${
                   msg.role === 'user' ? 'bg-blue-200 ml-auto' : 'bg-gray-100 mr-auto'
                 }`}
               >
-                <ReactMarkdown>{msg.text}</ReactMarkdown>
+                <ReactMarkdown 
+                  components={{
+                    ul: ({ children }) => <ul className="list-disc pl-6">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal pl-6">{children}</ol>,
+                    li: ({ children }) => <li className="mb-1">{children}</li>,
+                  }}
+                >{msg.text}</ReactMarkdown>
               </div>
             ))}
             {isLoading && <div className="text-gray-400 italic">Thinking...</div>}
