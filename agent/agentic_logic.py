@@ -386,7 +386,7 @@ def generate_hiring_plan_role_and_purpose(state: AgentState) -> AgentState:
         "Please let me kow if the user response is relevat or not so that I can ask again. Reply as no or yes only."
     ).lower().strip()
 
-    pdb.set_trace()
+    #pdb.set_trace()
 
     if(decision == 'yes'):
         state["hiring_plan_details_role_and_purpose"] += f"{user_input} "
@@ -394,3 +394,5 @@ def generate_hiring_plan_role_and_purpose(state: AgentState) -> AgentState:
         state["user_messages"].append(AIMessage(content=("That seems great!. Proceeding further.")))
 
     return state
+
+    
