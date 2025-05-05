@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "agent": "gnome-terminal --tab --title='HR Agent' -- bash -ic \"cd \\\"$PWD\\\" && python -m agent.HRAgent; exec bash\"",
-    "dev": "yarn agent & yarn web",
+    "dev": "yarn web",
     "web": "next dev",
     "build": "next build",
     "start": "next start",
