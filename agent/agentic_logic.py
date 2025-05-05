@@ -443,6 +443,7 @@ def get_hiring_plan_time_and_urgency(state: AgentState) -> AgentState:
 
 
 def get_hiring_plan_work_authorization_requirements(state: AgentState) -> AgentState:
+    
     body = (
         "Wonderful!!\nNow need details to know the work authorization requirments:\n\n"
         " • **Visa requirements**: are you willing to sponsor work visa?\n"
@@ -457,7 +458,21 @@ def get_hiring_plan_work_authorization_requirements(state: AgentState) -> AgentS
     )
 
 def generate_hiring_checklist(state: AgentState) -> AgentState:
-    state["user_messages"].append(AIMessage(content="Lets Generate the Check List now"))
+
+    role_details      = state["hiring_plan_details_role_and_purpose"]
+    urgency_details   = state["hiring_plan_details_time_and_urgency"]
+    visa_requirements = state["hiring_plan_details_work_authorization"]
+
+    prompt = (
+        f"We have following details: {role_details}, {urgency_details}, {visa_requirements}" 
+        f"We have to generate a hiring check list for company: “{COMPANY_DETAILS['MISSION']}” having clients {COMPANY_DETAILS['CLIENTS']}, "
+        f"We should give the timeline, tools we can use to make applications, social media approach, usage of AI tools, techniques to shortlist, etc"
+        f"Use your imagination if there is something important that has to included and give checklist of minimum 5 points"
+    )
+
+    checklist = llm.predict(prompt)
+
+    state["user_messages"].append(AIMessage(content=checklist))
     return state
 
 

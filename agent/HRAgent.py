@@ -117,9 +117,6 @@ workflow.add_conditional_edges(
     lambda s: "collect_job_details" if s.get("job_details_missing") else "generate_job_description"
 )
 
-# workflow.add_edge("get_skills", "get_pay")
-# workflow.add_edge("get_pay", "generate_job_description")
-
 
 workflow.add_conditional_edges(
     "generate_job_description",
