@@ -82,7 +82,7 @@ export default function HRLangGraphUI() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-4xl font-bold text-center"
+          className="text-2xl font-bold text-center"
           style={{ color: themes.accent }}
         >
           HR Chat Agent - Squareshift
@@ -92,11 +92,11 @@ export default function HRLangGraphUI() {
 
       <Card className="w-full max-w-4xl mx-auto rounded-2xl shadow-xl">
         <CardContent className="p-6 space-y-4">
-          <div className="h-[60vh] overflow-y-auto space-y-3">
+          <div className="h-[60vh] overflow-y-auto space-y-1">
             {messages.map((msg, index) => (
               <div
                 key={index}
-                className={`prose prose-sm p-3 rounded-lg w-fit max-w-[80%] text-lg whitespace-pre-wrap ${
+                className={`prose prose-sm p-3 rounded-lg w-fit max-w-[80%] text-sm whitespace-pre-wrap ${
                   msg.role === 'user' ? 'bg-blue-200 ml-auto' : 'bg-gray-100 mr-auto'
                 }`}
               >

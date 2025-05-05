@@ -73,6 +73,17 @@ class AgentState(TypedDict):
     generated_job_descriptions: List[str]
     ###############################################
     hiring_support_option: int
+    hiring_plan_details: str
+    hiring_plan_details_role_and_purpose: str
+    hiring_plan_details_time_and_urgency: str
+    hiring_plan_details_work_authorization: str
+    hiring_plan_details_role_and_purpose_complete: bool
+    hiring_plan_details_time_and_urgency_complete: bool
+    hiring_plan_details_work_authorization_complete: bool
+    hiring_plan_details_role_and_purpose_count: int
+    hiring_plan_details_time_and_urgency_count: int
+    hiring_plan_details_work_authorization_count: int
+
     intent: str
     agent_outcome: Union[AgentAction, AgentFinish, None]
     agent_scratchpad: str
@@ -99,6 +110,15 @@ def build_initial_state(user_input: str) -> AgentState:
             ],
         "job_details_missing": True,
         "hiring_support_option": None,
+        "hiring_plan_details_role_and_purpose": "",
+        "hiring_plan_details_time_and_urgency": "",
+        "hiring_plan_details_work_authorization": "",
+        "hiring_plan_details_role_and_purpose_complete": False,
+        "hiring_plan_details_time_and_urgency_complete": False,
+        "hiring_plan_details_work_authorization_complete": False,
+        "hiring_plan_details_role_and_purpose_count": 0,
+        "hiring_plan_details_time_and_urgency_count": 0,
+        "hiring_plan_details_work_authorization_count": 0,
         "key_responsibilities": None,
         "intent": "",
         "agent_outcome": None,
@@ -337,5 +357,40 @@ def generate_job_description(state: AgentState) -> AgentState:
     else:
         # we only allow two drafts, so reset the flag
         state["additional_drafts"] = False
+
+    return state
+
+
+def generate_hiring_plan_role_and_purpose(state: AgentState) -> AgentState:
+
+    state["hiring_plan_details_role_and_purpose_complete"] = False
+
+    inital_message = "**Hello,**\n" if state["hiring_plan_details_role_and_purpose_count"] == 0 else "**It seems that the last resposne was not valid**. Please try again. "
+
+    state["hiring_plan_details_role_and_purpose_count"]+=1
+
+    message = (
+        f"I see you’re planning to hire a new team member for **{COMPANY_DETAILS['NAME']}**. To help me find the best fit, please describe in one paragraph:\n\n"
+        " • **The role you’re looking to fill** (job title and key responsibilities),\n"
+        " • **The main purpose of this hire** (why it’s needed),\n"
+        " • **What you hope to achieve through this recruitment drive** (the outcomes or impact).\n\n"
+        "Your detailed paragraph will allow me to tailor our hiring plan precisely to your goals. Thank you!"
+    )
+
+    state["user_messages"].append(AIMessage(content=(inital_message + message)))
+
+    user_input = interrupt("Give Description")
+
+    decision = askLLM(
+        f"I have asked user to respons to this: {message} and user has provided this response: {user_input}"
+        "Please let me kow if the user response is relevat or not so that I can ask again. Reply as no or yes only."
+    ).lower().strip()
+
+    pdb.set_trace()
+
+    if(decision == 'yes'):
+        state["hiring_plan_details_role_and_purpose"] += f"{user_input} "
+        state["hiring_plan_details_role_and_purpose_complete"] = True
+        state["user_messages"].append(AIMessage(content=("That seems great!. Proceeding further.")))
 
     return state
