@@ -93,3 +93,5 @@ def match_profile_to_job(input: str) -> str:
     except Exception as e:
         return f"Error occurred: {str(e)}"
 
+tools = [classify_intent, random_number_maker, match_profile_to_job]
+tools_map = {t.name: t for t in tools}
