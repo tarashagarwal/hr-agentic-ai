@@ -49,8 +49,8 @@ system_query_prompt = ChatPromptTemplate.from_messages([
 ])
 
 HR_ACTIONS = [
-    "1. Prepare a Job Description",
-    "2. Get a Matching Score for Profile and Job Description"
+    "1. Prepare a job description",
+    "2. Get a matching score for profile and job description"
     "3. Create a hiring plan" 
 ]
 
@@ -267,7 +267,7 @@ def handle_hiring_query(state: AgentState) -> AgentState:
 
     option_chosen = interrupt("Choose the option")
 
-    prompt = f"User had options {HR_ACTIONS} and has chosen '{option_chosen}'. Give me the number that the user has chosen"
+    prompt = f"User had options {HR_ACTIONS} and has chosen '{option_chosen}'. Give me the number only that the user has chosen"
     option_chosen_by_user = int(askLLM(prompt).strip())
     state["hiring_support_option"] = option_chosen_by_user
 
@@ -278,7 +278,7 @@ def profile_match(state: AgentState) -> AgentState:
     count_of_generated_descriptions = len(state["generated_job_descriptions"])
     
     if count_of_generated_descriptions > 0:
-        resp = "Please note: I will will only compare similarity with the last generated job description. Please provide the candidate profile or resume as text."
+        resp = "Please note: I will will only compare similarity with the last generated job description. **Please provide the candidate profile or resume as text.**"
         state["user_messages"].append(AIMessage(content=resp))
         candidate_profile = interrupt("Please provide candidate profile")
         similarity_data = {
@@ -287,7 +287,7 @@ def profile_match(state: AgentState) -> AgentState:
         }
 
         result = tools_map["match_profile_to_job"].invoke(json.dumps(similarity_data))
-        resp = f"The candidate has a matching score of {result * 100}% with the last generated job description."
+        resp = f"The candidate has a matching score of {result}% with the last generated job description."
         state["user_messages"].append(AIMessage(content=resp))
 
     else:
@@ -308,8 +308,8 @@ def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
     # Build the question
     if not state.get("job_details"):
         question = (
-            f"I can help you with writing a job description"
-            "but first I need to know a few details:\n"
+            f"I can help you with writing a job description "
+            "but please help me with these details:\n"
             f"{ordered_list}"
         )
     else:
@@ -371,7 +371,7 @@ def generate_job_description(state: AgentState) -> AgentState:
 
     # 2) Decide which focus we want
     is_second_draft = state.get("additional_drafts", False)
-    focus = "technical fit" if is_second_draft else "cultural fit"
+    focus = "technical skills" if is_second_draft else "cultural fit"
 
     # 3) Build a single prompt template
     prompt = (
@@ -383,10 +383,14 @@ def generate_job_description(state: AgentState) -> AgentState:
 
     # 4) Get the draft and append to messages
     draft = llm.predict(prompt)
+
+    draft += ("\n\n**We are done generating drafts, please initiate the process again if you need to do any other task.**" if is_second_draft else "") 
     state["generated_job_descriptions"].append(draft)
+
+
     message = f"Here is your {focus} draft:\n\n{draft}\n\n"
     if not is_second_draft:
-        message += "**Would you like another draft focused on technical fit?**"
+        message += "**Would you like another draft with emphasis on tech skills?**"
     state["user_messages"].append(AIMessage(content=message))
 
     # 5) If this was the first draft, ask whether to loop for a second
@@ -394,18 +398,17 @@ def generate_job_description(state: AgentState) -> AgentState:
         answer = interrupt("Do you need another draft?")
         decision = askLLM(
             f"I have asked user if they need another job draft and they have replied: '{answer}'. "
-            "If user ask any other question or is vague, classify it as no"
-            "Classify this as 'yes' or 'no' only"
+            "Interpret the user response as 'yes' or 'no' only"
         ).lower().strip()
         need_more = (decision == "yes")
         state["additional_drafts"] = need_more
         if not need_more:
             message= "Seems you are not interested in another draft. Let me know what else I can help you with."
+            state = build_initial_state("")
             state["user_messages"].append(AIMessage(content=message))
     else:
         # we only allow two drafts, so reset the flag
         state["additional_drafts"] = False
-
     return state
 
 
@@ -471,8 +474,9 @@ def generate_hiring_checklist(state: AgentState) -> AgentState:
     )
 
     checklist = llm.predict(prompt)
-
+    state = build_initial_state("") #resetting state
     state["user_messages"].append(AIMessage(content=checklist))
+    
     return state
 
 
