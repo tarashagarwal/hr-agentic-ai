@@ -14,11 +14,20 @@ const themes = {
 };
 
 export default function HRLangGraphUI() {
-  const [user_messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]);  // start empty
   const [query, setQuery] = useState('');
   const [sessionId, setSessionId] = useState(() => uuidv4());
   const [isLoading, setIsLoading] = useState(false);
   const chatRef = useRef(null);
+
+  // Delay the initial system message by 1 second
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMessages([{ role: 'system', text: 'I am ready to help you.' }]);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSend = async () => {
     if (!query.trim()) return;
@@ -35,7 +44,10 @@ export default function HRLangGraphUI() {
       const data = await response.json();
 
       if (data?.user_messages) {
-        const systemMessages = [{ role: 'system', text: data.user_messages[data.user_messages.length - 1].replace(/^system:\s*/, '') }];
+        const systemMessages = [{
+          role: 'system',
+          text: data.user_messages[data.user_messages.length - 1].replace(/^system:\s*/, '')
+        }];
         setMessages((prev) => [...prev, ...systemMessages]);
       }
     } catch (error) {
@@ -48,7 +60,7 @@ export default function HRLangGraphUI() {
 
   useEffect(() => {
     chatRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [user_messages]);
+  }, [messages]);
 
   const handleNewSession = () => {
     const newId = uuidv4();
@@ -81,20 +93,22 @@ export default function HRLangGraphUI() {
       <Card className="w-full max-w-4xl mx-auto rounded-2xl shadow-xl">
         <CardContent className="p-6 space-y-4">
           <div className="h-[60vh] overflow-y-auto space-y-3">
-            {user_messages.map((msg, index) => (
+            {messages.map((msg, index) => (
               <div
                 key={index}
                 className={`prose prose-sm p-3 rounded-lg w-fit max-w-[80%] text-lg whitespace-pre-wrap ${
                   msg.role === 'user' ? 'bg-blue-200 ml-auto' : 'bg-gray-100 mr-auto'
                 }`}
               >
-                <ReactMarkdown 
+                <ReactMarkdown
                   components={{
                     ul: ({ children }) => <ul className="list-disc pl-6">{children}</ul>,
                     ol: ({ children }) => <ol className="list-decimal pl-6">{children}</ol>,
                     li: ({ children }) => <li className="mb-1">{children}</li>,
                   }}
-                >{msg.text}</ReactMarkdown>
+                >
+                  {msg.text}
+                </ReactMarkdown>
               </div>
             ))}
             {isLoading && <div className="text-gray-400 italic">Thinking...</div>}
@@ -106,10 +120,15 @@ export default function HRLangGraphUI() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask your HR assistant..."
-              className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isLoading}
+              className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               rows={2}
             />
-            <Button style={{ backgroundColor: themes.primary }} onClick={handleSend} disabled={!query.trim()}>
+            <Button
+              style={{ backgroundColor: themes.primary }}
+              onClick={handleSend}
+              disabled={!query.trim() || isLoading}
+            >
               Send
             </Button>
           </div>
