@@ -1,61 +1,135 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## System Requirements
+# 🧠 AI-Powered HR Assistant — Next.js + LangGraph
 
-To run this application without any issues, please ensure you have the following:
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app), integrated with a **LangGraph-based AI agent** for HR automation.
 
-- Node.js v20.19.1 LTS
-- npm (comes with Node.js)
+> ✨ The LangGraph agent code is located in the `/agent` directory at the root level.
 
-## Getting Started
+---
 
-First, run the development server:
+## 🚀 System Requirements
+
+Ensure the following dependencies are installed before setup:
+
+- **Node.js** v20.19.1 (LTS)
+- **npm** (comes with Node.js)
+- **Python** 3.10.9
+- **yarn** 1.22.22
+- **pip** 25.1.1
+
+---
+
+## ⚙️ Environment Setup
+
+1. **Create environment file**  
+   Copy the provided draft configuration:
+
+   ```bash
+   cp .draft.env.local .env.local
+   ```
+
+2. **Configure the following variables in `.env.local`:**
+
+   ```env
+   NEXT_PUBLIC_BASE_URL=https://68121212e81df7060eb6f6d2.mockapi.io
+   # This is required by the React boilerplate for API service (even if not directly used)
+
+   OPENAI_API_KEY=your-openai-api-key
+   GPT_MODEL_NAME=gpt-4.1-nano     # Use this version for best results
+   LANGCHAIN_API_KEY=your-langchain-api-key
+   LANGCHAIN_PROJECT=your-project-name
+   LANGCHAIN_TRACING_V2=true
+   ```
+
+---
+
+## 📦 Install Dependencies
+
+### 1. Install JavaScript packages
+From the project root:
 
 ```bash
-npm run dev
-# or
+yarn install
+```
+
+> Or use `npm install`, `pnpm install`, or `bun install` depending on your setup.
+
+### 2. Install Python packages
+Create a virtual environment if desired:
+
+```bash
+# Create virtual env (optional)
+python -m venv .venv
+source .venv/bin/activate      # macOS/Linux
+.venv\Scripts\activate         # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+---
+
+## ▶️ Running the Application
+
+This project requires **two servers**:
+
+| Component        | Command                        | Port   |
+|------------------|--------------------------------|--------|
+| Next.js Frontend | `yarn dev` or `npm run dev`    | 3000   |
+| Flask HR Agent   | `python -m agent.HRAgent`      | 5000   |
+
+### Run the frontend server:
+
+```bash
 yarn dev
 # or
-pnpm dev
-# or
-bun dev
+npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Run the LangGraph agent:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Environment Setup
-
-Before starting the application, you need to set up the required environment variables:
-
-1. Create a `.env.local` file in the root directory
-2. Add the following variables:
-
-```
-NEXT_PUBLIC_BASE_URL=your_api_base_url (https://68066228e81df7060eb6f6d2.mockapi.io) I used this
+```bash
+python -m agent.HRAgent
 ```
 
-This variable is required for the API service to function correctly. Without it, the application will show errors when trying to fetch data.
+---
 
-## Learn More
+## 🌐 Access the App
 
-To learn more about Next.js, take a look at the following resources:
+Visit: [http://localhost:3000](http://localhost:3000)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Login using any valid credentials that meet the format requirements:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```txt
+Email:    test@gmail.com
+Password: test12345678
+```
 
-## Deploy on Vercel
+> ⚠️ If ports `3000` or `5000` are already in use, please update your configuration accordingly.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📸 Screenshots
 
+### 🧭 LangGraph State Graph  
+![State Graph](https://github.com/user-attachments/assets/11912983-7d42-446b-a023-27924a174aec)
 
-Result: 
-![Assignemnt Result](https://github.com/user-attachments/assets/11912983-7d42-446b-a023-27924a174aec)
+### 📊 LangChain Tracing Dashboard  
+![LangSmith Tracing](https://github.com/user-attachments/assets/8a60400b-052e-495c-83f7-89eca009fa39)
 
+### 💬 Running Chat Application  
+![Chat App](https://github.com/user-attachments/assets/de174b72-0850-4af6-aa26-cbeaa67a026c)
+
+---
+
+## 📌 Notes
+
+- Stick with `gpt-4.1-nano` for model consistency.
+- `NEXT_PUBLIC_BASE_URL` is a required placeholder for the API structure of the boilerplate—your app may fail to fetch otherwise.
+- Tracing with LangChain is optional but enabled via `LANGCHAIN_TRACING_V2`.
+
+---
+
+## 📄 License
+
+Licensed under the [MIT License](LICENSE).
