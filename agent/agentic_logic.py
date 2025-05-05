@@ -49,9 +49,9 @@ system_query_prompt = ChatPromptTemplate.from_messages([
 ])
 
 HR_ACTIONS = [
-    "1. Get a Matching Score for Profile and Job Description",
-    "2. Prepare a Job Description",
-    "3. Create a hiring plan"
+    "1. Prepare a Job Description",
+    "2. Get a Matching Score for Profile and Job Description"
+    "3. Create a hiring plan" 
 ]
 
 

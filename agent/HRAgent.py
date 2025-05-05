@@ -71,7 +71,7 @@ workflow.add_conditional_edges(
 
 workflow.add_conditional_edges(
     "handle_hiring_query",
-    lambda s: "profile_match" if s.get("hiring_support_option") == 1 else "collect_job_details"
+    lambda s: "profile_match" if s.get("hiring_support_option") == 2 else "collect_job_details"
 )
 
 workflow.add_conditional_edges(
