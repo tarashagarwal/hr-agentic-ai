@@ -48,10 +48,7 @@ Just return one of the two categories: hiring or general_query.
     result = llm.invoke(prompt)
     return result.content.strip().lower()
 
-@tool("random_number", return_direct=True)
-def random_number_maker(input_text: str) -> str:
-    """Return a random integer between 0 and 100 as a string."""
-    return "Generated Random Number = " + str(random.randint(0, 100))
+
 
 
 from langchain.tools import tool
@@ -93,5 +90,5 @@ def match_profile_to_job(input: str) -> str:
     except Exception as e:
         return f"Error occurred: {str(e)}"
 
-tools = [classify_intent, random_number_maker, match_profile_to_job]
+tools = [classify_intent, match_profile_to_job]
 tools_map = {t.name: t for t in tools}

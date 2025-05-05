@@ -35,8 +35,8 @@ llm = ChatOpenAI(model=os.getenv("GPT_MODEL_NAME"))
 # ─── Agent prompt and runnable setup ─────────────────────────────────────────
 agent_prompt = ChatPromptTemplate.from_messages([
     ("system",  "Answer what ever the user is asking "
-    "but mention and remember that your skills are best" 
-    "used for hiring related purposes"),
+    "at the end of the answer mention that though you could do a lot of things"
+    "your skills are best used for hiring related purposes"),
     ("user",    "{input}"),
     ("system",  "{agent_scratchpad}")
 ])
@@ -219,6 +219,8 @@ def profile_match(state: AgentState) -> AgentState:
         }
 
         result = tools_map["match_profile_to_job"].invoke(json.dumps(similarity_data))
+        resp = f"The candidate has a matching score of {result * 100}% with the last generated job description."
+        state["user_messages"].append(AIMessage(content=resp))
 
     else:
         resp = "It seems you have not generated a Job Description Yet. Please generate one. I can only compare score with the last generated Job Description"   
@@ -328,6 +330,7 @@ def generate_job_description(state: AgentState) -> AgentState:
             "Classify this as 'yes' or 'no' only"
         ).lower().strip()
         need_more = (decision == "yes")
+        state["additional_drafts"] = need_more
         if not need_more:
             message= "Seems you are not interested in another draft. Let me know what else I can help you with."
             state["user_messages"].append(AIMessage(content=message))
