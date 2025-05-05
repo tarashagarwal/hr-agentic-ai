@@ -168,6 +168,54 @@ def get_validated_input(
     return state
 
 
+def get_hiring_plan_section(
+    state: AgentState,
+    section_key: str,
+    message_body: str,
+    success_message: str
+) -> AgentState:
+    """
+    Generic collector for a ‘hiring plan’ section.
+    - section_key: e.g. "role_and_purpose" or "time_and_urgency"
+    - message_body: the full instructions to show the user
+    - success_message: what to append when they answer validly
+    """
+    complete_k = f"hiring_plan_details_{section_key}_complete"
+    count_k    = f"hiring_plan_details_{section_key}_count"
+    data_k     = f"hiring_plan_details_{section_key}"
+    
+    # initialize counters & flags
+    state.setdefault(count_k, 0)
+    state[complete_k] = False
+    
+    # choose intro vs retry prefix
+    prefix = (
+        ""
+        if state[count_k] == 0
+        else "**It seems that the last response was not valid.** Please try again with more details.\n\n"
+    )
+    state[count_k] += 1
+    
+    # build & send prompt
+    prompt = prefix + message_body
+    state["user_messages"].append(AIMessage(content=prompt))
+    user_input = interrupt(prompt)
+    
+    # validate via LLM
+    decision = askLLM(
+        f"I asked:\n{message_body}\n\n"
+        f"User replied:\n{user_input}\n\n"
+        "Is this response relevant? Reply 'yes' or 'no' only."
+    ).strip().lower()
+    
+    if decision == "yes":
+        # store their answer
+        state.setdefault(data_k, "")
+        state[data_k] += user_input + " "
+        state[complete_k] = True
+        state["user_messages"].append(AIMessage(content=success_message))
+    
+    return state
 
 # ─── State transition functions ────────────────────────────────────────────────
 def run_agent(state: AgentState) -> AgentState:
@@ -361,38 +409,55 @@ def generate_job_description(state: AgentState) -> AgentState:
     return state
 
 
-def generate_hiring_plan_role_and_purpose(state: AgentState) -> AgentState:
-
-    state["hiring_plan_details_role_and_purpose_complete"] = False
-
-    inital_message = "**Hello,**\n" if state["hiring_plan_details_role_and_purpose_count"] == 0 else "**It seems that the last resposne was not valid**. Please try again. "
-
-    state["hiring_plan_details_role_and_purpose_count"]+=1
-
-    message = (
-        f"I see you’re planning to hire a new team member for **{COMPANY_DETAILS['NAME']}**. To help me find the best fit, please describe in one paragraph:\n\n"
-        " • **The role you’re looking to fill** (job title and key responsibilities),\n"
+def get_hiring_plan_role_and_purpose(state: AgentState) -> AgentState:
+    body = (
+        f"Okay,\nI see you’re planning to hire a new team member for **{COMPANY_DETAILS['NAME']}**. "
+        "To help me find the best fit, please describe in one paragraph:\n\n"
+        " • **The role you’re looking to fill** (job title & key responsibilities),\n"
         " • **The main purpose of this hire** (why it’s needed),\n"
-        " • **What you hope to achieve through this recruitment drive** (the outcomes or impact).\n\n"
-        "Your detailed paragraph will allow me to tailor our hiring plan precisely to your goals. Thank you!"
+        " • **What you hope to achieve** (outcomes or impact).\n\n"
+        "Your detailed paragraph will allow us to tailor our hiring plan precisely to your goals. Thank you!"
+    )
+    return get_hiring_plan_section(
+        state,
+        section_key="role_and_purpose",
+        message_body=body,
+        success_message="That seems great! Proceeding further."
     )
 
-    state["user_messages"].append(AIMessage(content=(inital_message + message)))
 
-    user_input = interrupt("Give Description")
+def get_hiring_plan_time_and_urgency(state: AgentState) -> AgentState:
+    body = (
+        "Nice!!\nNeed more detail to understand the **time & urgency** of this hire:\n\n"
+        " • **Urgency to fill**: How urgent is it to fill this vacancy?\n"
+        " • **Preferred Start**: Immediate vs. phased onboarding?\n"
+        " • **Hiring deadline**: Max time you have to fill the role.\n\n"
+        "Once we know the urgency, we can plan next steps. Thank you!"
+    )
+    return get_hiring_plan_section(
+        state,
+        section_key="time_and_urgency",
+        message_body=body,
+        success_message="This seems good — let’s move ahead."
+    )
 
-    decision = askLLM(
-        f"I have asked user to respons to this: {message} and user has provided this response: {user_input}"
-        "Please let me kow if the user response is relevat or not so that I can ask again. Reply as no or yes only."
-    ).lower().strip()
 
-    #pdb.set_trace()
+def get_hiring_plan_work_authorization_requirements(state: AgentState) -> AgentState:
+    body = (
+        "Wonderful!!\nNow need details to know the work authorization requirments:\n\n"
+        " • **Visa requirements**: are you willing to sponsor work visa?\n"
+        " • Is there any visa category you are not willing to sponsor\n"
+        "Once we know the visa requirement, it will help us to filter possible candidates. Thank you!"
+    )
+    return get_hiring_plan_section(
+        state,
+        section_key="work_authorization",
+        message_body=body,
+        success_message="Almost Done. Lets generate results"
+    )
 
-    if(decision == 'yes'):
-        state["hiring_plan_details_role_and_purpose"] += f"{user_input} "
-        state["hiring_plan_details_role_and_purpose_complete"] = True
-        state["user_messages"].append(AIMessage(content=("That seems great!. Proceeding further.")))
-
+def generate_hiring_checklist(state: AgentState) -> AgentState:
+    state["user_messages"].append(AIMessage(content="Lets Generate the Check List now"))
     return state
 
-    
+

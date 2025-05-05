@@ -27,7 +27,10 @@ from agent.agentic_logic import (
     profile_match,
     collect_job_details,
     generate_job_description,
-    generate_hiring_plan_role_and_purpose,
+    get_hiring_plan_role_and_purpose,
+    get_hiring_plan_time_and_urgency,
+    get_hiring_plan_work_authorization_requirements,
+    generate_hiring_checklist,
     AgentState
 )
 
@@ -54,9 +57,11 @@ workflow.add_node("handle_general_query", handle_general_query)
 workflow.add_node("profile_match", profile_match)
 workflow.add_node("handle_hiring_query", handle_hiring_query)
 workflow.add_node("collect_job_details", collect_job_details)
-workflow.add_node("generate_hiring_plan_role_and_purpose", generate_hiring_plan_role_and_purpose)
+workflow.add_node("get_hiring_plan_role_and_purpose", get_hiring_plan_role_and_purpose)
+workflow.add_node("get_hiring_plan_time_and_urgency", get_hiring_plan_time_and_urgency)
+workflow.add_node("get_hiring_plan_work_authorization_requirements", get_hiring_plan_work_authorization_requirements)
 workflow.add_node("generate_job_description", generate_job_description)
-
+workflow.add_node("generate_hiring_checklist", generate_hiring_checklist)
 
 workflow.add_conditional_edges(
     "initialize_agent",
@@ -77,16 +82,34 @@ workflow.add_conditional_edges(
         if s.get("hiring_support_option") == 1 else
         "profile_match"
         if s.get("hiring_support_option") == 2 else
-        "generate_hiring_plan_role_and_purpose"
+        "get_hiring_plan_role_and_purpose"
     )
 )
 
 workflow.add_conditional_edges(
-    "generate_hiring_plan_role_and_purpose",
+    "get_hiring_plan_role_and_purpose",
     lambda s: (
-        "generate_hiring_plan_role_and_purpose"
-        if False else END
+        "get_hiring_plan_role_and_purpose"
+        if not s.get("hiring_plan_details_role_and_purpose_complete") else
+        "get_hiring_plan_time_and_urgency"
     )
+)
+
+workflow.add_conditional_edges(
+    "get_hiring_plan_time_and_urgency",
+    lambda s: (
+        "get_hiring_plan_time_and_urgency"
+        if not s.get("hiring_plan_details_time_and_urgency_complete") else
+        "get_hiring_plan_work_authorization_requirements"
+    )
+)
+
+workflow.add_edge("get_hiring_plan_work_authorization_requirements","generate_hiring_checklist")
+
+workflow.add_conditional_edges(
+    "generate_hiring_checklist",
+    lambda s: "end",
+    {"end": END}
 )
 
 workflow.add_conditional_edges(
