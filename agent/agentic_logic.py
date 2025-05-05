@@ -70,6 +70,7 @@ class AgentState(TypedDict):
     additional_drafts: bool
     required_fields: List[tuple[str, str]]
     job_details_missing: bool
+    generated_job_descriptions: List[str]
     ###############################################
     hiring_support_option: int
     intent: str
@@ -87,6 +88,7 @@ def build_initial_state(user_input: str) -> AgentState:
         "messages": [],
         "user_messages": [],
         "job_details": {},
+        "generated_job_descriptions": [],
         "additional_drafts" : False,
         "required_fields": [
                 {"job_title": "Job Title"},
@@ -184,15 +186,15 @@ def handle_general_query(state: AgentState) -> AgentState:
 def handle_hiring_query(state: AgentState) -> AgentState:
    
     state["hiring_support_option"] = None #resetting
+    input = state["input"]
     
     prompt = (
         "User has requested for hiring support and we need to help"
-        "Please take the user under confidence that we can help and"
+        f"User has asked the following {input} please take the user under confidence"
         f"Tell them that there are three ways: {HR_ACTIONS} Give a ordered list in same order"
     )
 
     intro_message = askLLM(prompt).strip()
-    pdb.set_trace()
     state["user_messages"].append(AIMessage(content=intro_message))
 
     option_chosen = interrupt("Choose the option")
@@ -205,8 +207,23 @@ def handle_hiring_query(state: AgentState) -> AgentState:
 
 
 def profile_match(state: AgentState) -> AgentState:
-    resp = "Will Match Whatever You wish"
-    state["user_messages"].append(AIMessage(content=resp))
+    count_of_generated_descriptions = len(state["generated_job_descriptions"])
+    
+    if count_of_generated_descriptions > 0:
+        resp = "Please note: I will will only compare similarity with the last generated job description. Please provide the candidate profile or resume as text."
+        state["user_messages"].append(AIMessage(content=resp))
+        candidate_profile = interrupt("Please provide candidate profile")
+        similarity_data = {
+                "job_description": state["generated_job_descriptions"][-1],
+                "user_profile": candidate_profile
+        }
+
+        result = tools_map["match_profile_to_job"].invoke(json.dumps(similarity_data))
+
+    else:
+        resp = "It seems you have not generated a Job Description Yet. Please generate one. I can only compare score with the last generated Job Description"   
+        state["user_messages"].append(AIMessage(content=resp))
+
     return state
 
 def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
@@ -217,11 +234,12 @@ def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
         for i, d in enumerate(required_fields)
     )
 
+
     # Build the question
     if not state.get("job_details"):
         question = (
-            f"I can help you with this {COMPANY_DETAILS['NAME']}. "
-            "I can help you with that, but first I need to know a few details:\n"
+            f"I can help you with writing a job description"
+            "but first I need to know a few details:\n"
             f"{ordered_list}"
         )
     else:
@@ -295,6 +313,7 @@ def generate_job_description(state: AgentState) -> AgentState:
 
     # 4) Get the draft and append to messages
     draft = llm.predict(prompt)
+    state["generated_job_descriptions"].append(draft)
     message = f"Here is your {focus} draft:\n\n{draft}\n\n"
     if not is_second_draft:
         message += "**Would you like another draft focused on technical fit?**"

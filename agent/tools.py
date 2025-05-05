@@ -3,6 +3,7 @@ import random
 from dotenv import load_dotenv, find_dotenv
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
+import json
 
 # Load environment so GPT_MODEL_NAME is available
 from dotenv import load_dotenv, find_dotenv
@@ -52,45 +53,43 @@ def random_number_maker(input_text: str) -> str:
     """Return a random integer between 0 and 100 as a string."""
     return "Generated Random Number = " + str(random.randint(0, 100))
 
-tools = [classify_intent, random_number_maker]
-tools_map = {t.name: t for t in tools}
-
 
 from langchain.tools import tool
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-@tool("match_profile_to_job", return_direct=True)
-def match_profile_to_job(input: dict) -> str:
+from langchain.tools import tool
+import json
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+@tool("match_profile_to_job", return_direct=False)
+def match_profile_to_job(input: str) -> str:
     """
-    Compare a job description and a user profile text to determine how well they match.
-    
-    Input: {
-        "job_description": "...",
-        "user_profile": "..."
-    }
-    Returns: A similarity score and summary.
+    Compares a candidate profile with a job description and returns a match score.
+
+    **Input**: A JSON‐encoded string with two keys:
+      - "job_description": the text of the job description
+      - "user_profile": the text of the candidate’s profile
+
+    **Returns**: 
+      - If both texts are present, a float similarity score between 0 and 1.
+      - Otherwise, an error message string.
     """
     try:
-        jd = input.get("job_description", "")
-        profile = input.get("user_profile", "")
+        data = json.loads(input)
+        jd = data.get("job_description", "")
+        profile = data.get("user_profile", "")
 
         if not jd.strip() or not profile.strip():
             return "Job description or profile text is missing."
 
-        # TF-IDF Vectorization
         vectorizer = TfidfVectorizer()
         vectors = vectorizer.fit_transform([jd, profile])
-        similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
+        similarity = float(cosine_similarity(vectors[0:1], vectors[1:2])[0][0])
 
-        # Build response
-        score_percent = round(similarity * 100, 2)
-        message = (
-            f"✅ Match Score: {score_percent}%\n"
-            f"This score indicates the textual similarity between the job and the profile. "
-            f"Consider reading both texts manually for better context."
-        )
-        return message
+        return str(similarity)
 
     except Exception as e:
         return f"Error occurred: {str(e)}"
+
