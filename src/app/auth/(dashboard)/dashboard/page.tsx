@@ -92,7 +92,7 @@ export default function HRLangGraphUI() {
 
       <Card className="w-full max-w-4xl mx-auto rounded-2xl shadow-xl">
         <CardContent className="p-6 space-y-4">
-          <div className="h-[60vh] overflow-y-auto space-y-1">
+          <div className="h-[60vh] overflow-y-auto space-y-3">
             {messages.map((msg, index) => (
               <div
                 key={index}
