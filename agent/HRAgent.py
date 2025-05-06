@@ -104,7 +104,15 @@ workflow.add_conditional_edges(
     )
 )
 
-workflow.add_edge("get_hiring_plan_work_authorization_requirements","generate_hiring_checklist")
+workflow.add_conditional_edges(
+    "get_hiring_plan_work_authorization_requirements",
+    lambda s: (
+        "get_hiring_plan_work_authorization_requirements"
+        if not s.get("hiring_plan_details_work_authorization_complete") else    
+        "generate_hiring_checklist"
+    )
+)
+
 
 workflow.add_conditional_edges(
     "generate_hiring_checklist",

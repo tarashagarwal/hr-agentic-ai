@@ -205,7 +205,7 @@ def get_hiring_plan_section(
     decision = askLLM(
         f"I asked:\n{message_body}\n\n"
         f"User replied:\n{user_input}\n\n"
-        "Is this response relevant? Reply 'yes' or 'no' only."
+        "Is this userresponse relevant as per the question? Reply 'yes' or 'no' only."
     ).strip().lower()
     
     if decision == "yes":
@@ -468,7 +468,7 @@ def generate_hiring_checklist(state: AgentState) -> AgentState:
 
     prompt = (
         f"We have following details: {role_details}, {urgency_details}, {visa_requirements}" 
-        f"We have to generate a hiring check list for company: “{COMPANY_DETAILS['MISSION']}” having clients {COMPANY_DETAILS['CLIENTS']}, "
+        f"We have to generate a hiring check list for company:{COMPANY_DETAILS['NAME']} having a mission: {COMPANY_DETAILS['MISSION']} having clients {COMPANY_DETAILS['CLIENTS']}, "
         f"We should give the timeline, tools we can use to make applications, social media approach, usage of AI tools, techniques to shortlist, etc"
         f"Use your imagination if there is something important that has to included and give checklist of minimum 5 points"
     )
