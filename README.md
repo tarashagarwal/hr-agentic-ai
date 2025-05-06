@@ -72,6 +72,7 @@ pip install -r requirements.txt
 ## ▶️ Running the Application
 
 This project requires **two servers**:
+Please run them in two separate terminals.
 
 | Component        | Command                        | Port   |
 |------------------|--------------------------------|--------|

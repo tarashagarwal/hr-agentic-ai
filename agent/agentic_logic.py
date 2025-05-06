@@ -404,7 +404,7 @@ def generate_job_description(state: AgentState) -> AgentState:
         state["additional_drafts"] = need_more
         if not need_more:
             message= "Seems you are not interested in another draft. Let me know what else I can help you with."
-            state = build_initial_state("")
+            state["job_details"] = {} #Clearing up so that user can generate novel job detail if triggered again
             state["user_messages"].append(AIMessage(content=message))
     else:
         # we only allow two drafts, so reset the flag
@@ -474,7 +474,9 @@ def generate_hiring_checklist(state: AgentState) -> AgentState:
     )
 
     checklist = llm.predict(prompt)
-    state = build_initial_state("") #resetting state
+    state["hiring_plan_details_role_and_purpose"]   = "" #resetting state params
+    state["hiring_plan_details_time_and_urgency"]   = ""
+    state["hiring_plan_details_work_authorization"] = ""
     state["user_messages"].append(AIMessage(content=checklist))
     
     return state

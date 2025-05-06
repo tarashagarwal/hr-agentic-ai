@@ -116,7 +116,7 @@ def match_profile_to_job(input: str) -> str:
 
         # Return as percentage
         percent = round(sim * 100, 2)
-        return f"{percent}%"
+        return f"{percent}"
 
     except Exception as e:
         return f"Error occurred: {str(e)}"
