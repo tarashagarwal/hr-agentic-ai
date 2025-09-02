@@ -1,7 +1,7 @@
 COMPANY_DETAILS = {
-    "NAME": "Squareshift",
+    "NAME": "Tarash Apps",
     "LOCATION": "California, United States of America",
-    "EMAIL": "hr@squareshift.co",
+    "EMAIL": "tarash.agarwal@gmail.com",
     "MISSION": (
         "We aim to be the best & trusted partner for enterprise cloud adoption "
         "in the markets we operate. With our customers, we’ll build a reputation "

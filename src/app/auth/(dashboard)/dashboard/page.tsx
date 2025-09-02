@@ -85,7 +85,7 @@ export default function HRLangGraphUI() {
           className="text-2xl font-bold text-center"
           style={{ color: themes.accent }}
         >
-          HR Chat Agent - Squareshift
+          HR Chat Agent - Tarash HR Assistant
         </motion.h1>
         <Button onClick={handleNewSession} className="ml-4">New Session</Button>
       </div>

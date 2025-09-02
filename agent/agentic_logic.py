@@ -317,7 +317,6 @@ def collect_job_details(state: AgentState, max_attempts: int = 5) -> AgentState:
 
         fields = [(k, v) for entry in required_fields for k, v in entry.items()]
         missing_labels = [label for key, label in fields if label not in  state.get("job_details")]
-
         if not missing_labels:
             state["job_details_missing"] = False 
             return state
